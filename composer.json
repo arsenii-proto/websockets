@@ -1,6 +1,7 @@
 {
   "name": "arsenii/websockets",
   "description": "Laravel Web Sockets, with routing and direct message pushing",
+  "type": "library",
   "license": "MIT",
   "keywords" : ["WebSocket", "websockets", "routed", "listenner"],
   "homepage" : "https://github.com/arsenii-proto/websockets",
@@ -10,15 +11,13 @@
           "email": "arsenii.proto@gmail.com"
       }
   ],
-  "repositories": [
-    {
-        "type": "vcs",
-        "url": "https://github.com/arsenii-proto/websockets.git"
-    }
-  ],
+  "autoload": {
+      "psr-4": {
+          "Arsenii\\WebSockets\\": ""
+      }
+  },
   "require" : {
     "php": ">=7.0",
-    "laravel/framework": "5.*",
-    "arsenii/websockets": "dev-master"
+    "laravel/framework": "5.*"
   }
 }
