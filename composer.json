@@ -17,7 +17,8 @@
     }
   ],
   "require" : {
-    "php": ">=5.3.3",
-    "pbalan/directory-parser": "dev-master"
+    "php": ">=7.0",
+    "laravel/framework": "5.*",
+    "arsenii/websockets": "dev-master"
   }
 }
