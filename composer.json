@@ -1,0 +1,23 @@
+{
+  "name": "arsenii/websockets",
+  "description": "Laravel Web Sockets, with routing and direct message pushing",
+  "license": "MIT",
+  "keywords" : ["WebSocket", "websockets", "routed", "listenner"],
+  "homepage" : "https://github.com/arsenii-proto/websockets",
+  "authors": [
+      {
+          "name": "arsenii-proto",
+          "email": "arsenii.proto@gmail.com"
+      }
+  ],
+  "repositories": [
+    {
+        "type": "vcs",
+        "url": "https://github.com/arsenii-proto/websockets.git"
+    }
+  ],
+  "require" : {
+    "php": ">=5.3.3",
+    "pbalan/directory-parser": "dev-master"
+  }
+}
