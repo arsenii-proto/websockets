@@ -141,6 +141,20 @@ final class WebSocketEvent implements EventInterface
 
   public function send($message = null){
 
+    if( in_array( gettype($message), ['object', 'array'] ) ){
+
+      if( gettype($message) == 'object' && method_exists( $message, 'toString') ){
+        $message = $message->toString();
+
+      }else{
+        $message = json_encode($message);
+
+      }
+
+    }
+
+    $message = (string)$message;
+
     $this->connection->send($message);
 
   }

@@ -9,12 +9,15 @@ use Arsenii\WebSockets\Listenner\WebSocketListennerBuilder as Listenner;
 class WebSocketsStart extends Command
 {
 
-    protected $signature    = 'websockets:start';
+    protected $signature    = 'websockets:start {--host=empty} {--port=empty}';
     protected $description  = 'Command description';
 
     public function handle()
     {
-      $this->websocket  = new Server();
+      $host = $this->option('host') != 'empty' ? $this->option('host') : null;
+      $port = $this->option('port') != 'empty' ? $this->option('port') : null;
+
+      $this->websocket  = new Server($host, $port);
       Listenner::setServer($this->websocket);
       include base_path('routes/websockets.php');
       $this->comment("WebSocket start [{$this->websocket->address}]");

@@ -190,6 +190,20 @@ final class WebSocketServer implements ServerInterface
 
         }else{
 
+          if( in_array( gettype($message), ['object', 'array'] ) ){
+
+            if( gettype($message) == 'object' && method_exists( $message, 'toString') ){
+              $message = $message->toString();
+
+            }else{
+              $message = json_encode($message);
+
+            }
+
+          }
+
+          $message = (string)$message;
+
           $sock = fsockopen($this->host, $this->inlinePort, $errno, $errstr, 2);
       		fwrite($sock, "GET / HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: ".$this->host."\r\nSec-WebSocket-Key: TyPfhFqWTjuw8eDAxdY8xg==\r\nSec-WebSocket-Version: 13\r\nContent-Length: ".strlen($message)."\r\n\r\n");
       		$headers = fread($sock, 2000);

@@ -39,7 +39,7 @@ final class WebSocketConnection implements ConnectionInterface
 			}
 		}
 
-		$key        = $headers['Sec-WebSocket-Key'];
+		$key        = isset($headers['Sec-WebSocket-Key']) ? $headers['Sec-WebSocket-Key'] : '';
 		$hash       = base64_encode(sha1($key.'258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true));
 
 		$headers = array(
