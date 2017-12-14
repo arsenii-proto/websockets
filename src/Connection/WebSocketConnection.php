@@ -16,12 +16,15 @@ final class WebSocketConnection implements ConnectionInterface
 
   private $socket;
   private $server;
+  public $id;
   public $state = 1;
 
   function __construct($socket = null, ServerInterface $server = null){
 
       $this->socket = $socket;
       $this->server = $server;
+
+      $this->id     = uniqid();
 
   }
 

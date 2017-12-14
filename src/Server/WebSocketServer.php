@@ -165,7 +165,7 @@ final class WebSocketServer implements ServerInterface
 					if ($connection->state == WebSocketConnection::STATE_OPEN) {
 						$this->newMessage($connection, $message, $trigger_events);
 					} else if ($connection->state == WebSocketConnection::STATE_CONNECTING) {
-						$connection->accept($buffer);
+            $this->acceptConnection($connection, $buffer, $trigger_events);
 					}
 				}
 			}
@@ -247,7 +247,7 @@ final class WebSocketServer implements ServerInterface
   public function send($conn, $message){
       $bufferSize = 4096;
   		$opcode = 1;
-
+      // echo 'tosend : `'.$message.'`'.PHP_EOL;
   		if (is_object($message)) {
   			$message = (string)$message;
   		}
@@ -310,7 +310,7 @@ final class WebSocketServer implements ServerInterface
   			}
   			while ($left > 0);
   		}
-
+      // echo 'message - sended'.PHP_EOL;
       $this->dispachEvent('MessageSended', $conn, $message);
 
   		return true;
@@ -359,14 +359,25 @@ final class WebSocketServer implements ServerInterface
   private function newConnection($socket, $trigger_events){
     $connection = new WebSocketConnection($socket, $this);
     if( $trigger_events ){
-      if( !$this->dispachEvent('Connecting', $connection)->isPropagationStopped() ){
         $this->sockets[]      = $socket;
         $this->connections[]  = $connection;
-        $this->dispachEvent('Connected', $connection);
-      }
     }else{
       $this->inlineSockets[]      = $socket;
       $this->inlineConnections[]  = $connection;
+    }
+  }
+
+  private function acceptConnection($connection, $buffer, $trigger_events){
+    if( $trigger_events ){
+      if( !$this->dispachEvent('Connecting', $connection)->isPropagationStopped() ){
+        $connection->accept($buffer);
+        $this->dispachEvent('Connected', $connection);
+      }else{
+        $connection->disconnect();
+        $this->removeConnection($connection);
+      }
+    }else{
+      $connection->accept($buffer);
     }
   }
 

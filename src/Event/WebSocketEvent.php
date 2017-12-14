@@ -87,6 +87,9 @@ final class WebSocketEvent implements EventInterface
     if( is_null( $pattern ) )
       return false;
 
+    if( $pattern === '*' )
+      return true;
+
     foreach (explode('&&', $pattern) as $flow) {
       if( empty( trim( $flow ) ) )
         continue;
