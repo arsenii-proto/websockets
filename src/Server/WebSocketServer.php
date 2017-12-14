@@ -316,7 +316,7 @@ final class WebSocketServer implements ServerInterface
   		return true;
   }
 
-  private function error($message, $is_exception = false){
+  private function error($message, $is_exception = false){ 
 
 		$lastErrorCode    = socket_last_error($this->socket);
 		$lastErrorMessage = socket_strerror($lastErrorCode);
