@@ -1,5 +1,5 @@
 <?php
-namespace Arsenii\WebSockets\Server;
+namespace Arsenii\WebSockets\Server; 
 
 /**
  *
@@ -165,7 +165,7 @@ final class WebSocketServer implements ServerInterface
 					if ($connection->state == WebSocketConnection::STATE_OPEN) {
 						$this->newMessage($connection, $message, $trigger_events);
 					} else if ($connection->state == WebSocketConnection::STATE_CONNECTING) {
-						$connection->accept($buffer);
+            $this->acceptConnection($connection, $buffer, $trigger_events);
 					}
 				}
 			}
@@ -189,6 +189,20 @@ final class WebSocketServer implements ServerInterface
           }
 
         }else{
+
+          if( in_array( gettype($message), ['object', 'array'] ) ){
+
+            if( gettype($message) == 'object' && method_exists( $message, 'toString') ){
+              $message = $message->toString();
+
+            }else{
+              $message = json_encode($message);
+
+            }
+
+          }
+
+          $message = (string)$message;
 
           $sock = fsockopen($this->host, $this->inlinePort, $errno, $errstr, 2);
       		fwrite($sock, "GET / HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: ".$this->host."\r\nSec-WebSocket-Key: TyPfhFqWTjuw8eDAxdY8xg==\r\nSec-WebSocket-Version: 13\r\nContent-Length: ".strlen($message)."\r\n\r\n");
@@ -233,7 +247,7 @@ final class WebSocketServer implements ServerInterface
   public function send($conn, $message){
       $bufferSize = 4096;
   		$opcode = 1;
-
+      // echo 'tosend : `'.$message.'`'.PHP_EOL;
   		if (is_object($message)) {
   			$message = (string)$message;
   		}
@@ -296,13 +310,13 @@ final class WebSocketServer implements ServerInterface
   			}
   			while ($left > 0);
   		}
-
+      // echo 'message - sended'.PHP_EOL;
       $this->dispachEvent('MessageSended', $conn, $message);
 
   		return true;
   }
 
-  private function error($message, $is_exception = false){
+  private function error($message, $is_exception = false){ 
 
 		$lastErrorCode    = socket_last_error($this->socket);
 		$lastErrorMessage = socket_strerror($lastErrorCode);
@@ -345,14 +359,25 @@ final class WebSocketServer implements ServerInterface
   private function newConnection($socket, $trigger_events){
     $connection = new WebSocketConnection($socket, $this);
     if( $trigger_events ){
-      if( !$this->dispachEvent('Connecting', $connection)->isPropagationStopped() ){
         $this->sockets[]      = $socket;
         $this->connections[]  = $connection;
-        $this->dispachEvent('Connected', $connection);
-      }
     }else{
       $this->inlineSockets[]      = $socket;
       $this->inlineConnections[]  = $connection;
+    }
+  }
+
+  private function acceptConnection($connection, $buffer, $trigger_events){
+    if( $trigger_events ){
+      if( !$this->dispachEvent('Connecting', $connection)->isPropagationStopped() ){
+        $connection->accept($buffer);
+        $this->dispachEvent('Connected', $connection);
+      }else{
+        $connection->disconnect();
+        $this->removeConnection($connection);
+      }
+    }else{
+      $connection->accept($buffer);
     }
   }
 

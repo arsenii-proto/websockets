@@ -18,8 +18,8 @@ class WebSocketsProvider extends ServiceProvider
       }
 
       $this->publishes([
-            __DIR__.'/publishing/config.php' => config_path('websockets.php'),
-            __DIR__.'/publishing/routes.php' => base_path('routes/websockets.php'),
+            __DIR__.'/../publishing/config.php' => config_path('websockets.php'),
+            __DIR__.'/../publishing/routes.php' => base_path('routes/websockets.php'),
         ]);
 
     }
