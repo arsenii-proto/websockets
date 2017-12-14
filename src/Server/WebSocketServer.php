@@ -1,5 +1,5 @@
 <?php
-namespace Arsenii\WebSockets\Server; 
+namespace Arsenii\WebSockets\Server;
 
 /**
  *
