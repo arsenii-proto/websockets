@@ -19,6 +19,7 @@ final class WebSocketEvent implements EventInterface
   private $connection;
   private $server;
   private $stopped;
+  private $message;
   private $_data;
 
   function __construct($type = null, $connection = null, $message = null, $server = null)
@@ -26,6 +27,7 @@ final class WebSocketEvent implements EventInterface
     $this->type       = $type;
     $this->connection = $connection;
     $this->server     = $server;
+    $this->message    = $message;
     $this->_data      = json_decode($message);
 
     if( is_null( $this->_data ) )
@@ -33,7 +35,18 @@ final class WebSocketEvent implements EventInterface
 
   }
 
+  public function getData(){
+    return $this->_data;
+  }
+
+  public function getRawData(){
+    return $this->message;
+  }
+
   public function get($flow = null, $default = null){
+    if($flow == '*')
+      return $this->_data;
+
     if( isset( $this->_data->{$flow} ) ){
       return $this->_data->{$flow};
     }else if( !empty( trim( $flow ) ) && ( $parts = explode('.', $flow) ) != null && count( $parts ) > 0 ){
@@ -55,7 +68,7 @@ final class WebSocketEvent implements EventInterface
 
   public function has($flow = null){
     $val = uniqid();
-    return $this->get($flow, $val) != $val;
+    return $this->get($flow, $val) !== $val;
   }
 
   public function getType(){
@@ -81,6 +94,7 @@ final class WebSocketEvent implements EventInterface
   }
 
   public function match($pattern = null){
+
     $flows = [];
     $match = 1;
 
@@ -112,6 +126,7 @@ final class WebSocketEvent implements EventInterface
         ];
       }
     }
+
     foreach ( $flows as $flow) {
       if( $this->has($flow['var']) ){
         if( isset( $flow['val'] ) ){
@@ -147,6 +162,7 @@ final class WebSocketEvent implements EventInterface
     if( in_array( gettype($message), ['object', 'array'] ) ){
 
       if( gettype($message) == 'object' && method_exists( $message, 'toString') ){
+        
         $message = $message->toString();
 
       }else{
@@ -169,25 +185,25 @@ final class WebSocketEvent implements EventInterface
     ){
         switch( substr( $pattern, 1 ) ){
           case "null":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_null( $val ) : ! is_null( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_null( $val );
           case "num":
           case "number":
           case "numeric":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_numeric( $val ) : ! is_numeric( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_numeric( $val );
           case "int":
           case "integer":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_int( $val ) : ! is_int( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_int( $val );
           case "float":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_float( $val ) : ! is_float( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_float( $val );
           case "bool":
           case "boolean":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_bool( $val ) : ! is_bool( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_bool( $val );
           case "string":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_string( $val ) : ! is_string( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_string( $val );
           case "array":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_array( $val ) : ! is_array( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_array( $val );
           case "object":
-              return ( substr( $pattern, 0, 1 ) == ":" ) ? is_object( $val ) : ! is_object( $val );
+              return ( substr( $pattern, 0, 1 ) == ":" ) == is_object( $val );
         }
     }
     return $val == $pattern;
