@@ -19,6 +19,7 @@ final class WebSocketServer implements ServerInterface
   private $is_running;
   private $host;
   private $port;
+  private $protocol;
 	private $socket;
   private $sockets;
   private $connections = [];
@@ -31,13 +32,14 @@ final class WebSocketServer implements ServerInterface
 
   public $address;
 
-  function __construct($host = null, $port = null, $inlinePort = null)
+  function __construct($host = null, $port = null, $protocol = null, $inlinePort = null)
   {
       $this->is_running   = false;
       $this->host         = is_null($host)        ? config('websockets.host')       : $host;
       $this->port         = is_null($port)        ? config('websockets.port')       : $port;
+      $this->protocol     = is_null($protocol)    ? config('websockets.protocol')   : $protocol;
       $this->inlinePort   = is_null($inlinePort)  ? config('websockets.inlinePort') : $inlinePort;
-      $this->address      = "ws://{$this->host}:{$this->port}";
+      $this->address      = "{$this->protocol}://{$this->host}:{$this->port}";
   }
 
   public function run(){
