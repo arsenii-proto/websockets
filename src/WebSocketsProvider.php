@@ -7,32 +7,24 @@ use Illuminate\Support\ServiceProvider;
 // Commands
 use Arsenii\WebSockets\Console\WebSocketsStart;
 use Arsenii\WebSockets\Console\WebSocketsSend;
+use Arsenii\WebSockets\Console\WebSocketsDaemon;
 
-// Services
-use Arsenii\WebSockets\Services\ServerService;
-use Arsenii\WebSockets\Services\ListenerService;
-use Arsenii\WebSockets\Services\EventService;
-use Arsenii\WebSockets\Services\StreamService;
-use Arsenii\WebSockets\Services\ConnectionService;
-use Arsenii\WebSockets\Services\LooperService;
-use Arsenii\WebSockets\Services\EmitterService;
-use Arsenii\WebSockets\Services\BuilderService;
-use Arsenii\WebSockets\Services\DataResolverService;
 
 class WebSocketsProvider extends ServiceProvider
 {
     public function boot()
     {
-      if ($this->app->runningInConsole()) {
-          $this->commands([
-              WebSocketsStart::class,
-              WebSocketsSend::class
-          ]);
-      }
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                WebSocketsStart::class,
+                WebSocketsSend::class,
+                WebSocketsDaemon::class,
+            ]);
+        }
 
-      $this->publishes([
-            __DIR__.'/../Publish/config.php' => config_path('websockets.php'),
-            __DIR__.'/../Publish/routes.php' => base_path('routes/websockets.php'),
+        $this->publishes([
+            __DIR__.'/Publish/config.php' => config_path('websockets.php'),
+            __DIR__.'/Publish/routes.php' => base_path('routes/websockets.php'),
         ]);
 
     }
@@ -40,56 +32,47 @@ class WebSocketsProvider extends ServiceProvider
     public function register()
     {
 
-        $this->app->singleton('WS_Server', function($app) {
-            return new ServerService();
+        $this->app->singleton('ws.stream', function($app) {
+            return new \Arsenii\WebSockets\Stream();
+        });
+        
+        $this->app->singleton('ws.looper', function($app) {
+            return new \Arsenii\WebSockets\Looper();
+        });
+        
+        // $this->app->singleton('ws.emitter', function($app) {
+        //     return new \Arsenii\WebSockets\Emitter();
+        // });
+
+        $this->app->singleton('ws.builder', function($app) {
+            return new \Arsenii\WebSockets\Builder();
         });
 
-        $this->app->singleton('WS_Listener', function($app) {
-            return new ListenerService();
+        $this->app->singleton('ws.dataResolver', function($app) {
+            return new \Arsenii\WebSockets\DataResolver();
         });
 
-        $this->app->singleton('WS_Event', function($app) {
-            return new EventService();
+        $this->app->singleton('ws.servant', function($app) {
+            return new \Arsenii\WebSockets\Servant();
         });
 
-        $this->app->singleton('WS_Stream', function($app) {
-            return new StreamService();
+
+        $this->app->bind('ws.server', function($app) {
+            return new \Arsenii\WebSockets\Server();
         });
 
-        $this->app->singleton('WS_Connection', function($app) {
-            return new ConnectionService();
+        $this->app->bind('ws.listener', function($app) {
+            return new \Arsenii\WebSockets\Listener();
         });
 
-        $this->app->singleton('WS_Looper', function($app) {
-            return new LooperService();
+        $this->app->bind('ws.event', function($app) {
+            return new \Arsenii\WebSockets\Event();
         });
 
-        $this->app->singleton('WS_Emitter', function($app) {
-            return new EmitterService();
+        $this->app->bind('ws.connection', function($app) {
+            return new \Arsenii\WebSockets\Connection();
         });
 
-        $this->app->singleton('WS_Builder', function($app) {
-            return new BuilderService();
-        });
 
-        $this->app->singleton('WS_DataResolver', function($app) {
-            return new DataResolverService();
-        });
-
-    }
-
-    public function provides()
-    {
-        return [
-            'WS_Server',
-            'WS_Listener',
-            'WS_Event',
-            'WS_Stream',
-            'WS_Connection',
-            'WS_Looper',
-            'WS_Emitter',
-            'WS_Builder',
-            'WS_DataResolver',
-        ];
     }
 }

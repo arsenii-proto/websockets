@@ -5,14 +5,27 @@ namespace Arsenii\WebSockets\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
-class WebSocketStream extends Facade {
+class Stream extends Facade {
 
     /**
-     * @return string
+     * @method static string version()
+     * @method static string basePath()
+     * @method static string environment()
+     * @method static bool isDownForMaintenance()
+     * @method static void registerConfiguredProviders()
+     * @method static \Illuminate\Support\ServiceProvider register(\Illuminate\Support\ServiceProvider|string $provider, array $options = [], bool $force = false)
+     * @method static void registerDeferredProvider(string $provider, string $service = null)
+     * @method static void boot()
+     * @method static void booting(mixed $callback)
+     * @method static void booted(mixed $callback)
+     * @method static string getCachedServicesPath()
+     *
+     * @see \Arsenii\WebSockets\Services\StreamService
      */
+
     protected static function getFacadeAccessor()
     {
-        return 'WS_Stream';
+        return 'ws.stream';
     }
 
 }

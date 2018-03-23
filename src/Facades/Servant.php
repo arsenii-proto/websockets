@@ -5,9 +5,9 @@ namespace Arsenii\WebSockets\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
-class DataResolver extends Facade {
+class Servant extends Facade {
 
-   /**
+    /**
      * @method static string version()
      * @method static string basePath()
      * @method static string environment()
@@ -20,12 +20,12 @@ class DataResolver extends Facade {
      * @method static void booted(mixed $callback)
      * @method static string getCachedServicesPath()
      *
-     * @see \Arsenii\WebSockets\Services\DataResolverService
+     * @see \Arsenii\WebSockets\Services\ServantService
      */
 
     protected static function getFacadeAccessor()
     {
-        return 'ws.dataresolver';
+        return 'ws.servant';
     }
 
 }
