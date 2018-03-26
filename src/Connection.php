@@ -311,7 +311,7 @@ class Connection
             $message    = $this->server->decode( $this->id, $buffreq );
 
             // dispatch('onMessage')
-            // Log::comment('onMessage ['. $this->target .']['. $message .']');
+            Log::comment('onMessage ['. $this->target .']['. $message .']');
         }
         
         // Log::comment('onRead ['. $this->target .']');
@@ -548,28 +548,27 @@ class Connection
 
         $this->status = static::STATUS_HANDSHAKE_ESTABLISHED;
 
-        // Websocket data buffer.
-        // $connection->websocketDataBuffer = '';
-        // Current websocket frame length.
-        // $connection->websocketCurrentFrameLength = 0;
-        // Current websocket frame data.
-        // $connection->websocketCurrentFrameBuffer = '';
-        // Consume handshake data.
+        $this->setFrame('buff', '');
+        $this->setFrame('curlen', 0);
+        $this->setFrame('curbuff','');
         $this->clearBuff( $headlen );
-        // Send handshake response.
+
+        Log::comment($upgrade);
+
         $this->send( $upgrade, true );
 
-        // There are data waiting to be sent.
-        // if (!empty($connection->tmpWebsocketData)) {
-        //     $connection->send($connection->tmpWebsocketData, true);
-        //     $connection->tmpWebsocketData = '';
-        // }
-        // blob or arraybuffer
-        // if (empty($connection->websocketType)) {
-        //     $connection->websocketType = static::BINARY_TYPE_BLOB;
-        // }
+        if (! empty( $this->getFrame('tmp') ) ) {
+
+            $this->send( $this->getFrame('tmp'), true );            
+            $this->setFrame('tmp', '');
+        }
+        
+        if ( empty( $this->getFrame('type') ) ) {
+
+            $this->setFrame('type', Server::BINARY_TYPE_BLOB);
+        }
         // Try to emit onWebSocketConnect callback.
-        // if (isset($connection->onWebSocketConnect) || isset($connection->worker->onWebSocketConnect)) {
+        // if ( isset($connection->onWebSocketConnect) || isset($connection->worker->onWebSocketConnect)) {
         //     static::parseHttpHeader($buffer);
         //     try {
         //         call_user_func(isset($connection->onWebSocketConnect)?$connection->onWebSocketConnect:$connection->worker->onWebSocketConnect, $connection, $buffer);

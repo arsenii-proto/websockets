@@ -1,6 +1,6 @@
 <?php
 
-namespace Arsenii\WebSockets\Provider;
+namespace Arsenii\WebSockets;
 
 use Illuminate\Support\ServiceProvider;
 

@@ -225,16 +225,16 @@ class Server
         }
 
         if( isset( $vars['ssl'] ) ){
-            if( isset( $vars['ssl'][''] ) ){
-                $this->hostPrivateKey   = $vars['ssl'][''];
+            if( isset( $vars['ssl']['local_private_key'] ) ){
+                $this->hostPrivateKey   = $vars['ssl']['local_private_key'];
             }
             
-            if( isset( $vars['ssl'][''] ) ){
-                $this->hostCert         = $vars['ssl'][''];
+            if( isset( $vars['ssl']['local_certificate'] ) ){
+                $this->hostCert         = $vars['ssl']['local_certificate'];
             }
             
-            if( isset( $vars['ssl'][''] ) ){
-                $this->hostPassphrase   = $vars['ssl'][''];
+            if( isset( $vars['ssl']['passphrase'] ) ){
+                $this->hostPassphrase   = $vars['ssl']['passphrase'];
             }
         }
 
@@ -252,8 +252,8 @@ class Server
             (
                 $this->hostProtocol == 'ws' ? null : [
                     'ssl' => [
-                        'local_cert'    => $this->hostPrivateKey,
-                        'local_pk'      => $this->hostCert,
+                        'local_cert'    => $this->hostCert,
+                        'local_pk'      => $this->hostPrivateKey,
                         'passphrase'    => $this->hostPassphrase,
                         'verify_peer'   => !1,
                     ]
@@ -345,7 +345,9 @@ class Server
                 return 0;
             }
 
-            if( $connection->getStatus() < Connection::STATUS_HANDSHAKE_ESTABLISHED ){
+            Log::comment($connection->getStatus());
+
+            if( $connection->getStatus() < Connection::STATUS_ESTABLISHED ){
 
                 //Log::comment('handshake ['. $connuid .']');
                 return $this->handshake($connuid);
@@ -366,6 +368,8 @@ class Server
                 $is_fin_frame   = $first >> 7;
                 $masked         = $second >> 7;
                 $opcode         = $first & 0xf;
+
+                Log::comment($opcode);
 
                 switch ( $opcode ) {
                     case 0x0: break;
