@@ -341,7 +341,7 @@ class Server
 
             if ( $bufflen < 2 ) {
 
-                // Log::comment('bufflen ['. $bufflen .']');
+                Log::comment('bufflen ['. $bufflen .']');
                 return 0;
             }
 
@@ -349,7 +349,7 @@ class Server
 
             if( $connection->getStatus() < Connection::STATUS_ESTABLISHED ){
 
-                //Log::comment('handshake ['. $connuid .']');
+                Log::comment('handshake ['. $connuid .']');
                 return $this->handshake($connuid);
             }
 
@@ -376,7 +376,7 @@ class Server
                     // Blob type.
                     case 0x1: break;
                     // Arraybuffer type.
-                    case 0x2: break;
+                    case 0x2: Log::comment($opcode); break;
                     // Close package.
                     case 0x8:
 
@@ -589,6 +589,7 @@ class Server
      * @return string
      */
     public function encode( $connuid, $buff ){   
+        
         if (! is_scalar( $buff ) ) {
 
             throw new \Exception("You can't send(" . gettype( $buff ) . ") to client, you need to convert it to a string. ");
@@ -633,6 +634,7 @@ class Server
 
                     //dispatch('onError')
                     
+                    Log::comment('encode empty 1');
                     return '';
                 }
 
@@ -645,12 +647,14 @@ class Server
 
                 }
 
+                Log::comment('encode empty 2');
                 return '';
             }
 
             return $encode_buffer;
         }
 
+        Log::comment('encode empty 3');
         return '';
     }
 

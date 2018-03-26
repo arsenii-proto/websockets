@@ -159,14 +159,39 @@ class Stream
     /**
      * Unset registered callback on event by target.
      *
+     * @param  string   $event
      * @param  string   $target
      * @return void
      */
-    public static function off( string $target = '' ){
+    public static function off( string $type = 'read', string $target = '' ){
+
+        if( 
+                empty( $type ) 
+            ||  empty( $target ) 
+        )
+            return false;
+
+        foreach ( static::$events as $evuid => $event ) {
+            
+            if( $event->target == $target && $event->type == $type )
+                unset( static::$events[ $evuid ] );
+        }
+
+        return true;
+        
+    }
+
+    /**
+     * Unset registered callback on event by target.
+     *
+     * @param  string   $target
+     * @return void
+     */
+    public static function offEvent( string $target = '' ){
 
         if( 
                 empty( $target )
-            &&  (! isset( static::$events[ $target ] ) )
+            ||  (! isset( static::$events[ $target ] ) )
         )
             return false;
 
@@ -186,7 +211,7 @@ class Stream
 
         if( 
                 empty( $target )
-            &&  (! isset( static::$sockets[ $target ] ) )
+            ||  (! isset( static::$sockets[ $target ] ) )
         )
             return false;
         

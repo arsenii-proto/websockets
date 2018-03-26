@@ -206,7 +206,7 @@ class Connection
                 in_array( $this->type, [ 'wss', 'auto' ] )
             &&  $this->status < static::STATUS_HANDSHAKE_ESTABLISHED
         ){
-
+            Log::comment('wss enter');
             $result = Stream::crypto( $this->target, !0 );
             
             if( false === $result ) {
@@ -218,12 +218,12 @@ class Connection
 
                 return $this->destroy();
 
-            } elseif(0 === $result) {
+            } elseif( 0 === $result ) {
 
                 return; // There isn't enough data and should try again.
             }
             
-            // dispatch('onSslHandshake')
+            Log::comment(" dispatch('onSslHandshake') ");
             // Log::comment('onSslHandshake ['. $this->target .']');
             
             $this->status = static::STATUS_HANDSHAKE_ESTABLISHED;
@@ -239,15 +239,12 @@ class Connection
 
             if( Stream::checkFEOF( $this->target, static::READ_BUFFER_SIZE ) ){
 
+                Log::comment('destroy 1');
                 return $this->destroy();
             }
             
         }
 
-        if( $this->status == static::STATUS_HANDSHAKE_ESTABLISHED ){
-
-            $this->status == static::STATUS_ESTABLISHED;
-        }
 
         $this->_buff    .= $buffer;
         $this->_buffl   += strlen( $buffer );
@@ -256,25 +253,25 @@ class Connection
             
             if ($this->_cpl) {
 
-                //// Log::comment('if');
+                 Log::comment('if');
 
                 if ($this->_cpl > $this->_buffl ) {
-                    //// Log::comment('break');
+                     Log::comment('break');
                     break;
                 }
 
-                //// Log::comment('no break');
+                 Log::comment('no break');
 
             } else {
 
-                //// Log::comment('else');
+                 Log::comment('else');
                 
                 $this->_cpl = $this->server->getPackageLength( $this->id );
-                //// Log::comment('_cpl ['. $this->_cpl .']');
+                 Log::comment('_cpl ['. $this->_cpl .']');
 
                 if ( 0 === $this->_cpl ) {
 
-                    //// Log::comment('break ['. $this->_cpl .']');
+                     Log::comment('break ['. $this->_cpl .'] -> ');
 
                     break;
 
@@ -291,6 +288,7 @@ class Connection
                 } else {
 
                     Log::error( 'error package. package_length='. var_export($this->_cpl, true) );
+                    Log::comment('destroy 2');
                     $this->destroy();
                     return;
                 }
@@ -310,11 +308,13 @@ class Connection
             $this->_cpl = 0;
             $message    = $this->server->decode( $this->id, $buffreq );
 
-            // dispatch('onMessage')
+            Log::comment(" dispatch('onMessage') ");
             Log::comment('onMessage ['. $this->target .']['. $message .']');
+
+            $this->send('Merci, '.$message);
         }
         
-        // Log::comment('onRead ['. $this->target .']');
+        Log::comment('onRead ['. $this->target .']');
     }
 
     /**
@@ -390,13 +390,14 @@ class Connection
 
         if ( static::MAX_SEND_BUFFER_SIZE <= strlen( $this->_sendb ) + strlen( $data ) ) {
             
-            //dispatch('onError')
+            Log::comment(" dispatch('onError') ");
 
-            return true;
+            return false;
         }
 
-        return false;
-
+        $this->_sendb .= $data;
+        
+        return true;
     }
 
     /**
@@ -408,7 +409,7 @@ class Connection
      */
     public function send( $data, $raw = false ){
 
-        //// Log::comment('handshake -> handshake start send ['. $data .']');
+        Log::comment('handshake -> handshake start send ['. $data .']');
 
         if (
                 $this->status === static::STATUS_CLOSING
@@ -425,14 +426,14 @@ class Connection
 
             if ($data === '') {
 
-                //Log::comment('handshake -> handshake send data null ['. $data .']');
+                Log::comment('handshake -> handshake send data null ['. $data .']');
                 return null;
             }
         }
 
-        if ( $this->status < static::STATUS_HANDSHAKE_ESTABLISHED ) {
+        if ( $this->status < static::STATUS_ESTABLISHED ) {
 
-            //Log::comment('handshake -> handshake send buff ['. $data .']');
+            Log::comment('handshake -> handshake send buff ['. $data .']');
             $this->putSend( $data );
 
             return null;
@@ -442,7 +443,7 @@ class Connection
 
         if ( $this->_sendb === '' ) {
 
-            //Log::comment('handshake -> handshake send ['. $data .']');
+            Log::comment('handshake -> handshake send ['. $data .']');
 
             $len = Stream::FWRITE( $this->target, $data, 8192 );
 
@@ -460,7 +461,7 @@ class Connection
 
                 if (! Stream::alive( $this->target ) ) {
 
-                    // dispatch('onError')
+                    Log::comment(" dispatch('onError') ");
                     $this->destroy();
 
                     return false;
@@ -470,6 +471,10 @@ class Connection
             }
 
             // Worker::$globalEvent->add($this->_socket, EventInterface::EV_WRITE, array($this, 'baseWrite'));
+            Stream::on( 'write', $this->target, function(){
+    
+                $this->baseWrite();
+            });
 
             return null;
 
@@ -486,9 +491,13 @@ class Connection
      */
     public function checkSend(){
 
-        // if ($this->_sendb) {
-        //     Worker::$globalEvent->add($socket, EventInterface::EV_WRITE, array($this, 'baseWrite'));
-        // }
+        if ( $this->_sendb ) {
+
+            Stream::on( 'write', $this->target, function(){
+    
+                $this->baseWrite();
+            });
+        }
 
     }    
 
@@ -547,16 +556,20 @@ class Connection
     public function handshake(string $upgrade, int $headlen){
 
         $this->status = static::STATUS_HANDSHAKE_ESTABLISHED;
-
+        
         $this->setFrame('buff', '');
         $this->setFrame('curlen', 0);
         $this->setFrame('curbuff','');
+        $this->setFrame('handshake', true);
+
         $this->clearBuff( $headlen );
+        
+        $this->status = static::STATUS_ESTABLISHED;
 
         Log::comment($upgrade);
-
+        
         $this->send( $upgrade, true );
-
+        
         if (! empty( $this->getFrame('tmp') ) ) {
 
             $this->send( $this->getFrame('tmp'), true );            
@@ -606,7 +619,7 @@ class Connection
 
         $this->status = static::STATUS_CLOSED;
 
-        // dispatch('onClose')
+        Log::comment(" dispatch('onClose') ");
     }
 
     /**
@@ -617,7 +630,7 @@ class Connection
     public function ping(){
         
         $this->send( pack( 'H*', '8a00' ), true );
-        // dispatch('onPing')
+        Log::comment(" dispatch('onPing') ");
     }
 
     /**
@@ -628,7 +641,7 @@ class Connection
     public function pong(){
         
         // $this->send( pack( 'H*', '8a00' ), true );
-        // dispatch('onPing')
+        Log::comment(" dispatch('onPing') ");
     }
 
     /**
@@ -655,6 +668,39 @@ class Connection
         //         exit(0);
         //     }
         // }
+    }
+
+     /**
+     * Base write handler.
+     *
+     * @return void|bool
+     */
+    public function baseWrite()
+    {
+        $len = Stream::FWRITE( $this->target, $this->_sendb, 8192) ;
+
+        if ( $len === strlen( $this->_sendb ) ) {
+
+            Stream::off( 'write', $this->target );
+            
+            $this->_sendb = '';
+            
+            if ( $this->_status === static::STATUS_CLOSING ) {
+
+                $this->destroy();
+            }
+
+            return true;
+        }
+
+        if ( $len > 0 ) {
+
+            $this->_sendb = substr( $this->_sendb, $len );
+
+        } else {
+            
+            $this->destroy();
+        }
     }
 
 }
