@@ -132,7 +132,7 @@ class Connection
      *
      * @var int
      */
-    protected $_buffl = '';
+    protected $_buffl = 0;
     
     /**
      * Buffer to Send

@@ -250,18 +250,17 @@ class Server
         $this->masterSocket = Stream::open(
             'tcp://' . $this->hostAddress .':'. $this->hostPort .'/'. $this->hostPath,
             (
-                $this->hostProtocol == 'ws' ? null : [
+                $this->hostProtocol == 'ws' ? null : array_merge( [
                     'ssl' => [
                         'local_cert'    => $this->hostCert,
-                        'local_pk'      => $this->hostPrivateKey,
-                        'passphrase'    => $this->hostPassphrase,
+                        'local_pk'      => $this->hostPrivateKey,                        
                         'verify_peer'   => !1,
                     ]
-                ]
+                ], ( empty( $this->hostPassphrase ) ? [] : [ 'passphrase'    => $this->hostPassphrase ] ) )
             )
         );        
 
-        Log::info('add listen server');
+        Log::info("Server [ ".'tcp://' . $this->hostAddress .':'. $this->hostPort .'/'. $this->hostPath." ] are started");
 
         $this->listen();        
         Servant::addListenners();
