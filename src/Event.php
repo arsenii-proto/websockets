@@ -4,6 +4,8 @@ namespace Arsenii\WebSockets;
 
 use \ReflectionFunction;
 use \ReflectionMethod;
+use \ReflectionObject;
+use \ReflectionProperty;
 
 use Closure;
 
@@ -12,8 +14,8 @@ use Arsenii\WebSockets\Log;
 final class Event
 {
 
-  private $type;
   private $connection;
+  private $type;
   private $stopped;
   private $message;
   private $_data;
@@ -102,6 +104,18 @@ final class Event
   public function log( string $type = 'info', string $data ){
     
       Log::log( $type, $data );
+  }
+
+  public function __get( $property ) {
+
+    $reflection = new ReflectionObject($this);
+
+    if ( $reflection->hasProperty( $property ) ) {
+      
+      return $this->$property;
+
+    }
+
   }
 
 }

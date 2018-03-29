@@ -6,6 +6,9 @@ use Arsenii\WebSockets\Facades\Emitter;
 use Arsenii\WebSockets\Server;
 use Arsenii\WebSockets\Log;
 
+use \ReflectionObject;
+use \ReflectionProperty;
+
 class Connection
 {
     /**
@@ -77,6 +80,13 @@ class Connection
      * @var string
      */
     protected $target = null;
+    
+    /**
+     * Assigned
+     *
+     * @var string
+     */
+    protected $Assigned = [];
     
     /**
      * Server
@@ -154,6 +164,7 @@ class Connection
         'curbuff'   => '',
         'type'      => '',
     ];
+    
 
     /**
      * Create a new WebSockets Connection instance.
@@ -780,6 +791,42 @@ class Connection
             }
         }
 
+    }
+
+    public function __get( $property ) {
+
+        $reflection = new ReflectionObject($this);
+
+        if (
+                $reflection->hasProperty( $property )
+            &&  $reflection->getProperty( $property )->isPublic()
+        ) {
+
+            return $this->$property;
+
+        }elseif( isset( $this->Assigned[ $property ] ) ){
+
+            return $this->Assigned[ $property ];
+        }
+    }
+
+    public function __set( $property, $value ) {
+    
+        $reflection = new ReflectionObject($this);
+
+        if (
+                $reflection->hasProperty( $property )
+            &&  $reflection->getProperty( $property )->isPublic()
+        ) {
+
+            $this->$property = $value;
+
+        }else{
+
+            $this->Assigned[ $property ] = $value;
+        }
+
+        return $this;
     }
 
 }
