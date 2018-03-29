@@ -825,6 +825,9 @@ class Server
     }
 
     public function clearBacklog(){
+        
+        if(! is_dir( __DIR__."/Backlog" ) )
+            mkdir( __DIR__."/Backlog" );
 
         touch( __DIR__."/Backlog/{$this->backlog}.log" );
 
@@ -838,6 +841,9 @@ class Server
     }
 
     public function checkBacklog(){
+
+        if(! is_dir( __DIR__."/Backlog" ) )
+            mkdir( __DIR__."/Backlog" );
 
         touch( __DIR__."/Backlog/{$this->backlog}.log" );
 
@@ -862,6 +868,9 @@ class Server
     }
 
     public function putBacklog( string $data = '' ){
+
+        if(! is_dir( __DIR__."/Backlog" ) )
+            mkdir( __DIR__."/Backlog" );
         
         if(! is_dir( sys_get_temp_dir() ."/{$this->backlog}" ) ){
             
