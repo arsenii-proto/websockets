@@ -4,6 +4,7 @@ namespace Arsenii\WebSockets;
 
 use Arsenii\WebSockets\Facades\Stream;
 use Arsenii\WebSockets\Facades\Servant;
+use Arsenii\WebSockets\Facades\Emitter;
 use Arsenii\WebSockets\Connection;
 
 use Arsenii\WebSockets\Log;
@@ -44,6 +45,13 @@ class Server
      * @var string
      */
     const BINARY_TYPE_BLOB = "\x81";
+    
+    /**
+     * The backlog for WebSockets Server.
+     *
+     * @var string
+     */
+    protected $backlog;
     
     /**
      * The host address for WebSockets Server.
@@ -154,15 +162,20 @@ class Server
      * @param  string|null          $hostDefaultServantName
      * @return void
      */
-    public function __construct($hostAddress = null, $hostPort = null, $hostPath = null, $hostProtocol = null, $hostDefaultServantName = null){
-        Log::info('init server');
+    public function __construct($hostAddress = null, $hostPort = null, $hostPath = null, $hostProtocol = null){
+        
+        Log::info('init server', Log::LEVEL_DEBUG);
 
+        // Allow only CLI Mode
         if (php_sapi_name() != "cli") {
+
             exit("only run in command line mode \n");
         }
         
+        // Import configs from config_path('websockets.php')
         $default = config('websockets');
 
+        // hostAddress argument can be passed like array
         if( is_array( $hostAddress ) ){
 
             $default = array_merge( $default, $hostAddress );
@@ -181,13 +194,22 @@ class Server
             if(! is_null( $hostProtocol ) )
                 $default['protocol'] = $hostProtocol;
 
-            if(! is_null( $hostDefaultServantName ) )
-                $default['servant'] = $hostDefaultServantName;
-
         }
 
+        // Set Server variable from default array formed
         $this->setVars( $default );
 
+        $this->backlog = md5(
+            ( $this->hostProtocol != "auto" ? $this->hostProtocol : '(wss?)' ).
+            '://'.
+            $this->hostAddress.
+            ':'.
+            $this->hostPort.
+            ( substr( $this->hostPath, 0, 1 ) == '/' ? '' : '/' ).
+            $this->hostPath
+        );
+        
+        // Check OS 
         if (DIRECTORY_SEPARATOR === '\\') {
             self::$_OS = 'windows';
         }
@@ -201,39 +223,41 @@ class Server
      * @return void
      */
     protected function setVars($vars = []){
-        if( isset( $vars['host'] ) )
+        
+        if( isset( $vars['host'] ) ){
+
             $this->hostAddress      = $vars['host'];
+        }
 
-        if( isset( $vars['port'] ) )
+        if( isset( $vars['port'] ) ){
+
             $this->hostPort         = $vars['port'];
+        }
 
-        if( isset( $vars['path'] ) )
+        if( isset( $vars['path'] ) ){
+
             $this->hostPath         = $vars['path'];
+        }
 
-        if( isset( $vars['protocol'] ) )
+        if( isset( $vars['protocol'] ) ){
+
             $this->hostProtocol     = $vars['protocol'];
-
-        if( isset( $vars['servants'] ) )
-            $this->servants         = $vars['servants'];
-
-        if( isset( $vars['servant'] ) ){
-            $this->hostDefaultServantName = $vars['servant'];
-            
-            if( isset( $this->servants[ $this->hostDefaultServantName ] ) && is_array( $this->servants[ $this->hostDefaultServantName ] ) ){
-                $this->hostServant  = (object) $this->servants[ $this->hostDefaultServantName ]; 
-            }
         }
 
         if( isset( $vars['ssl'] ) ){
+
             if( isset( $vars['ssl']['local_private_key'] ) ){
+                
                 $this->hostPrivateKey   = $vars['ssl']['local_private_key'];
             }
             
             if( isset( $vars['ssl']['local_certificate'] ) ){
+                
                 $this->hostCert         = $vars['ssl']['local_certificate'];
             }
             
             if( isset( $vars['ssl']['passphrase'] ) ){
+                
                 $this->hostPassphrase   = $vars['ssl']['passphrase'];
             }
         }
@@ -246,40 +270,58 @@ class Server
      * @return void
      */
     public function start(){
-        Log::info('open server');
-        $this->masterSocket = Stream::open(
-            'tcp://' . $this->hostAddress .':'. $this->hostPort .'/'. $this->hostPath,
-            (
-                $this->hostProtocol == 'ws' ? null : array_merge( [
+
+        Log::info('open server', Log::LEVEL_DEBUG);
+
+        $address                = $this->hostAddress .':'. $this->hostPort .( substr( $this->hostPath, 0, 1 ) == '/' ? '' : '/' ). $this->hostPath;
+        $context_options        = null;
+
+        // If protocol not ws enable ssl
+        if( $this->hostProtocol != 'ws' ){
+
+            $context_options    = [
                     'ssl' => [
                         'local_cert'    => $this->hostCert,
                         'local_pk'      => $this->hostPrivateKey,                        
                         'verify_peer'   => !1,
                     ]
-                ], ( empty( $this->hostPassphrase ) ? [] : [ 'passphrase'    => $this->hostPassphrase ] ) )
-            )
-        );        
+                ];
+            
+            // If `passphrase` was added push it in context
+            if(! empty( $this->hostPassphrase ) ){
 
-        Log::info("Server [ ".'tcp://' . $this->hostAddress .':'. $this->hostPort .'/'. $this->hostPath." ] are started");
+                $context_options['ssl']['passphrase'] = $this->hostPassphrase;
+            }
 
-        $this->listen();        
-        Servant::addListenners();
-        Stream::loop();
-    }
+        }
 
-    /**
-     * Assign Events to Looper.
-     *
-     * @return void
-     */
-    protected function listen(){
+        // Open websockets stream server
+        $this->masterSocket     = Stream::open( 'tcp://'. $address, $context_options );
 
+        Log::info("Server [ ". ( $this->hostProtocol != "auto" ? $this->hostProtocol : '(wss?)' ) .'://'. $address ." ] are started");
+
+        $this->clearBacklog();
+
+        // Register event read on stream 
         Stream::on( 'read', $this->masterSocket, function($target, $data){
 
-            Log::info("on stream read [{$target}] [{$data}]");
+            Log::info("on stream read [{$target}] [{$data}]", Log::LEVEL_DEBUG);
+
+            // Create Connection 
             $this->makeConection($target);
         });
 
+        // Register event read on stream 
+        Stream::on( 'tick', function(){
+
+            $this->checkBacklog();
+        });
+
+        // Load all Listeners from base_path('routes/websockets.php')
+        Emitter::addListeners();
+
+        // Start Stream looper
+        Stream::loop();
     }
 
     /**
@@ -288,24 +330,29 @@ class Server
      * @param  string  $target
      * @return void
      */
-    protected function makeConection($target){   
+    protected function makeConection($target){
+
         $connuid    = null;
+
+        // Accept socket on the stream
         $new_target = Stream::accept($target);
         
+        // If socket wasn't accepted
         if (! $new_target ) {
             return;
         }
 
-
+        // Generate uniqid for new Connection
         while(
                 ( $connuid = uniqid( count( $this->connections ) + 1, !0 ) ) != null
             &&  ( isset( $this->connections[ $connuid ] ) )
         ); 
         
+        // Assign New Connection to server connections array with uniqid key
         $this->connections[ $connuid ] = new Connection($connuid, $new_target, $this->hostProtocol, $this);
 
-        Log::info( 'new Conn -> '. $connuid );
-        // dd( 'Idem Curiti,', $this->connections[ $connuid ] );
+        Log::info( 'new Conn -> '. $connuid, Log::LEVEL_DEBUG);
+
     }
 
     /**
@@ -314,7 +361,9 @@ class Server
      * @param  string  $connuid
      * @return bool
      */
-    public function unset($connuid){   
+    public function unset($connuid){
+
+        // Check Connection uniqid presence
         if ( isset( $this->connections[ $connuid ] ) ) {
 
             unset( $this->connections[ $connuid ] );
@@ -330,28 +379,38 @@ class Server
      * @param  string  $connuid
      * @return int
      */
-    public function getPackageLength($connuid){
+    public function packlen($connuid){
 
+        // Check Connection uniqid presence
         if ( isset( $this->connections[ $connuid ] ) ) {
 
+            // Take connection
             $connection = $this->connections[ $connuid ];
+
+            // Take buffer from connection
             $buff       = $connection->getBuffer();
+
+            // Take buffer length from connection
             $bufflen    = $connection->getBufferLen();
 
+            // Data offset (4 bits) ( take a look https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure )
             if ( $bufflen < 2 ) {
 
-                Log::comment('bufflen ['. $bufflen .']');
+                Log::comment('bufflen ['. $bufflen .']', Log::LEVEL_DEBUG);
                 return 0;
             }
 
-            Log::comment($connection->getStatus());
+            Log::comment('Conn Status ->'. $connection->getStatus(), Log::LEVEL_DEBUG);
 
             if( $connection->getStatus() < Connection::STATUS_ESTABLISHED ){
 
-                Log::comment('handshake ['. $connuid .']');
+                Log::comment('perform handshake ['. $connuid .']', Log::LEVEL_DEBUG);
+
+                // Perform Handshake ( take a look https://en.wikipedia.org/wiki/WebSocket#Protocol_handshake )
                 return $this->handshake($connuid);
             }
 
+            // When connection has websockets Frame length
             if ( $connection->getFrame('curlen') ) {
 
                 if ( $connection->getFrame('curlen') > $bufflen ) {
@@ -361,32 +420,35 @@ class Server
 
             } else {
 
-                $first          = ord( $buff[0] );
-                $second         = ord( $buff[1] );
-                $datalen        = $second & 127;
-                $is_fin_frame   = $first >> 7;
-                $masked         = $second >> 7;
-                $opcode         = $first & 0xf;
+                $first          = ord( $buff[0] ); // Take firsts 2 bits
+                $second         = ord( $buff[1] ); // Take seconds 2 bits
+                $datalen        = $second & 127; // Get data length
+                $is_fin_frame   = $first >> 7; // Check if is finish of frame ( segment )
+                $masked         = $second >> 7; // Check if frame ( segment ) was masked
+                $opcode         = $first & 0xf; // Get opcode ( take a look https://tools.ietf.org/html/rfc6455#page-65 )
 
-                Log::comment($opcode);
+                Log::comment('opcode -> '. $opcode, Log::LEVEL_DEBUG);
 
                 switch ( $opcode ) {
-                    case 0x0: break;
-                    // Blob type.
-                    case 0x1: break;
-                    // Arraybuffer type.
-                    case 0x2: Log::comment($opcode); break;
-                    // Close package.
+                    case 0x0: 
+                        break;
+
+                    case 0x1: 
+                        // Blob type.
+                        break;
+                    case 0x2: 
+                        // Arraybuffer type.
+                        Log::comment('opcode `Close package` -> '. $opcode, Log::LEVEL_DEBUG);
+                        break;
                     case 0x8:
-
+                        // Connection Close Frame
                         $connection->close();
-
                         return 0;
-                    // Ping package.
                     case 0x9:
-                        
+                        // Ping package.                        
                         $connection->ping();
 
+                        //  Consume data from receive buffer.
                         if (! $datalen ) {
 
                             $head_len   = $masked ? 6 : 2;
@@ -394,16 +456,15 @@ class Server
 
                             if ( $bufflen > $head_len ) {
                                 
-                                return $this->getPackageLength( $connuid );
+                                return $this->packlen( $connuid );
                             }
 
                             return 0;
                         }
 
                         break;
-                    // Pong package.
                     case 0xa:
-                        
+                        // Pong package.                        
                         $connection->pong();
                         
                         //  Consume data from receive buffer.
@@ -414,16 +475,17 @@ class Server
 
                             if ( $bufflen > $head_len ) {
 
-                                return $this->getPackageLength( $connuid );
+                                return $this->packlen( $connuid );
                             }
 
                             return 0;
                         }
 
                         break;
-                    // Wrong opcode. 
+                    
                     default :
-                        Log::error( "error opcode $opcode and close websocket connection. Buffer:" . $connection->getBuffer(!0) );
+                        // Wrong opcode. 
+                        Log::error( "Error opcode `$opcode` and close websocket connection. Buffer:`" . $connection->getBuffer(!0) .'`');
                         $connection->close();
                         return 0;
                 }
@@ -465,7 +527,7 @@ class Server
 
                 if ( $total_package_size > Connection::MAX_PACKAGE_SIZE ) {
 
-                    Log::error("error package. package_length=$total_package_size");                    
+                    Log::error("Error package. package_length = $total_package_size");                    
                     $connection->close();
                     return 0;
                 }
@@ -475,100 +537,119 @@ class Server
                     return $current_frame_length;
 
                 } else {
-
+                    
+                    // Push websockets Frame length
                     $connection->setFrame( 'curlen', $current_frame_length );
                 }
             }
             
         }
 
-        Log::comment('no conn ['. $connuid .']');
+        // Connection with uniqid not present
+        Log::comment('No conn ['. $connuid .']', Log::LEVEL_DEBUG);
         return 0;
     }
 
     /**
      * Make HandShake for connection.
+     * 
+     * source https://en.wikipedia.org/wiki/WebSocket#Protocol_handshake
      *
      * @param  string  $connuid
      * @return int
      */
-    protected function handshake( $connuid ){   
+    protected function handshake( $connuid ){
+
+        // Check Connection uniqid presence
         if ( isset( $this->connections[ $connuid ] ) ) {
 
+            // Take connection
             $connection = $this->connections[ $connuid ];
+
+            // Take buffer from connection
             $buff       = $connection->getBuffer();
+
+            // Take buffer length from connection
             $bufflen    = strlen( $buff );
 
             if ( 0 === strpos( $buff, 'GET' ) ) {
 
-                 //// Log::comment('handshake GET ['. $connuid .']');
+                 Log::comment('Handshake GET ['. $connuid .']', Log::LEVEL_DEBUG);
 
-                $endpos     = strpos($buff, "\r\n\r\n");
-                $headlen    = $endpos + 4;
+                $endpos     = strpos($buff, "\r\n\r\n"); // Take End position of Headers
+                $headlen    = $endpos + 4; // Get Length of Headers
                 $wskey      = '';
 
                 if (! $endpos ) {
 
-                     //Log::comment('handshake endpos ['. $connuid .']');
+                    Log::comment('Handshake not endpos ['. $connuid .']', Log::LEVEL_DEBUG);
                     return 0;
                 }
 
+                // If Header Sec-WebSocket-Key exists
                 if ( preg_match( "/Sec-WebSocket-Key: *(.*?)\r\n/i", $buff, $match ) ) {
 
-                    //Log::comment('handshake match key ['. $match[1] .']');
+                    Log::comment('Handshake match key ['. $match[1] .']', Log::LEVEL_DEBUG);
+
+                    // Put Header Sec-WebSocket-Key Value in wskey variable
                     $wskey = $match[1];
 
                 } else {
 
+                    // If Header Sec-WebSocket-Key not exists
                     $connection->send(  
                         "HTTP/1.1 400 Bad Request\r\n\r\n".
                         "<b>400 Bad Request</b><br>".
                         "Sec-WebSocket-Key not found.<br>".
                         "This is a WebSocket service and can not be accessed via HTTP.", 
-                        true 
+                        true // As RAW
                     );
 
                     $connection->close();
                     return 0;
                 }
                 
-                
+                // Generate own key by Header Sec-WebSocket-Key Value
                 $ownkey = base64_encode( sha1( $wskey . "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", true ) );
                 
+                // Standart Response Heders
                 $upgrade = "HTTP/1.1 101 Switching Protocols\r\n";
                 $upgrade .= "Upgrade: websocket\r\n";
                 $upgrade .= "Sec-WebSocket-Version: 13\r\n";
                 $upgrade .= "Connection: Upgrade\r\n";
-                $upgrade .= "Server: arsenii/". Server::VERSION ."\r\n";
-                $upgrade .= "Sec-WebSocket-Accept: ". $ownkey ."\r\n\r\n";
+                $upgrade .= "Server: arsenii/". Server::VERSION ."\r\n"; // Put Server Version in response
+                $upgrade .= "Sec-WebSocket-Accept: ". $ownkey ."\r\n\r\n"; // Put own key in response
                 
-                //Log::comment('handshake start handshake ['. $upgrade .']');
+                Log::comment('Handshake send Response ['. $upgrade .']', Log::LEVEL_DEBUG);
+
+                // Send Handshake Response and header length to connection for perform Handshake action
                 $connection->handshake( $upgrade, $headlen );
 
                 if ( $bufflen > $headlen ) {
 
-                    return $this->getPackageLength( substr( $buff, $headlen ) , $connection );
+                    return $this->packlen( substr( $buff, $headlen ) , $connection );
                 } 
 
                 return 0;
 
             }elseif ( 0 === strpos( $buff, '<polic' ) ) {
                 
+                // Standart xml policy response
                 $policy_xml     =   '<?xml version="1.0"?><cross-domain-policy><site-control permitted-cross-domain-policies="all"/>'.
                                     '<allow-access-from domain="*" to-ports="*"/></cross-domain-policy>' . "\0";
 
-                $connection->send( $policy_xml, true );
-                $connection->consumeRecvBuffer( strlen( $buff ) );
+                // Send Handshake Response and header length to connection for perform Handshake action
+                $connection->handshake( $policy_xml, strlen( $buff ) );
 
                 return 0;
             }
             
-            
+            // If Header Protocol not allowed
             $connection->send(
                 "HTTP/1.1 400 Bad Request\r\n\r\n".
                 "<b>400 Bad Request</b><br>".
                 "Invalid handshake data for websocket.",
-                true
+                true // As RAW
             );
             $connection->close();
 
@@ -576,7 +657,8 @@ class Server
             
         }
 
-        //Log::comment('handshake no conn ['. $connuid .']');
+        // Connection with uniqid not present
+        Log::comment('Handshake no connection ['. $connuid .']', Log::LEVEL_DEBUG);
         return 0;
     }
 
@@ -587,21 +669,27 @@ class Server
      * @param string    $buff
      * @return string
      */
-    public function encode( $connuid, $buff ){   
+    public function encode( $connuid, $buff ){
         
+        // If aren't scalar data type
         if (! is_scalar( $buff ) ) {
 
             throw new \Exception("You can't send(" . gettype( $buff ) . ") to client, you need to convert it to a string. ");
         }
 
+        // Check Connection uniqid presence
         if ( isset( $this->connections[ $connuid ] ) ) {
-
+            
+            // Take connection
             $connection = $this->connections[ $connuid ];
+            
+            // Take buffer length from connection
             $len        = strlen( $buff );
 
+            // If frame type are empty put default frame type
             if ( empty( $connection->getFrame('type') ) ) {
 
-                $connection->setFrame( 'type', static::BINARY_TYPE_BLOB );
+                $connection->setFrame( 'type', self::BINARY_TYPE_BLOB );
             }
 
             $first_byte = $connection->getFrame('type');
@@ -622,8 +710,10 @@ class Server
                 }
             }
 
+            // Check if Frame Handshake aren't assigned
             if ( empty( $connection->getFrame('handshake') ) ) {
 
+                // If frame tmp data are empty put default frame tmp data
                 if ( empty( $connection->getFrame('tmp') ) ) {
 
                     $connection->setFrame('tmp', '');
@@ -631,29 +721,35 @@ class Server
 
                 if ( strlen( $connection->getFrame('tmp') ) > Connection::MAX_SEND_BUFFER_SIZE ) {
 
-                    //dispatch('onError')
+                    // dispatch('onError')
                     
-                    Log::comment('encode empty 1');
+                    Log::comment('Encode Temporary Data Length bigest than `Connection MAX_SEND_BUFFER_SIZE` ('.Connection::MAX_SEND_BUFFER_SIZE.')', Log::LEVEL_DEBUG);
+
                     return '';
                 }
 
+                // Push to Frame temporary data
                 $connection->setFrame('tmp', $connection->getFrame('tmp') . $encode_buffer);
 
                 
                 if ( Connection::MAX_SEND_BUFFER_SIZE <= strlen( $connection->getFrame('tmp') ) ) {
 
+                    Log::comment('Encode Concatenated Temporary Data Length bigest than `Connection MAX_SEND_BUFFER_SIZE` ('.Connection::MAX_SEND_BUFFER_SIZE.')', Log::LEVEL_DEBUG);
                    //dispatch('bufer-full')
 
                 }
 
-                Log::comment('encode empty 2');
+                Log::comment('Encode Encoded Data was assigned in Frame tmp data', Log::LEVEL_DEBUG);
                 return '';
             }
 
+            // Return Encoded Data
             return $encode_buffer;
         }
 
-        Log::comment('encode empty 3');
+
+        // Connection with uniqid not present
+        Log::comment('Encode no connection ['. $connuid .']', Log::LEVEL_DEBUG);
         return '';
     }
 
@@ -666,13 +762,17 @@ class Server
      */
     public function decode( $connuid, $buff ){
 
+        // Check Connection uniqid presence
         if( isset( $this->connections[ $connuid ] ) ){
 
             $masks      = null;
             $data       = null;
             $decoded    = null;
+
+            // Take connection
             $connection = $this->connections[ $connuid ];
-            $len        = ord( $buff[1] ) & 127;
+
+            $len        = ord( $buff[1] ) & 127; // Get data length
 
             if ( $len === 126 ) {
 
@@ -696,29 +796,97 @@ class Server
             for ($i = 0; $i < strlen( $data ); $i++) 
                 $decoded    .= $data[$i] ^ $masks[$i % 4];
 
+            // If Frame data length push decoded data to buffer, and return all buffer
             if ( $connection->getFrame('curlen') ) {
 
                 $connection->setFrame('buff', $connection->getFrame('buff') . $decoded );
 
-                // Log::comment('return buf');
+                Log::comment('Decode push data in buff with returning', Log::LEVEL_DEBUG);
                 return $connection->getFrame('buff');
 
             } else {
 
+                // IF buffer aren't empty push buffer to decoded, after clear buffer
                 if ( $connection->getFrame('buff') !== '' ) {
 
+                    Log::comment('Decode push buff in decoded', Log::LEVEL_DEBUG);
                     $decoded    = $connection->getFrame('buff') . $decoded;
                     $connection->setFrame('buff', '');
                 }
 
-                // Log::comment('decoded');
+                Log::comment('Decode returning -> '. $decoded, Log::LEVEL_DEBUG);
                 return $decoded;
             }
         }
 
-        // Log::comment('null');
+        // Connection with uniqid not present
+        Log::comment('Encode no connection ['. $connuid .']', Log::LEVEL_DEBUG);
         return null;        
     }
 
+    public function clearBacklog(){
 
+        touch( __DIR__."/Backlog/{$this->backlog}.log" );
+
+        unlink( __DIR__."/Backlog/{$this->backlog}.log" );
+
+        if( is_dir( sys_get_temp_dir() ."/{$this->backlog}" ) ){
+            
+            array_map('unlink', glob(sys_get_temp_dir() ."/{$this->backlog}/*.*"));
+            rmdir( sys_get_temp_dir() ."/{$this->backlog}" );
+        }
+    }
+
+    public function checkBacklog(){
+
+        touch( __DIR__."/Backlog/{$this->backlog}.log" );
+
+        $lines  = file( __DIR__."/Backlog/{$this->backlog}.log", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+
+        foreach( $lines as $index => $line ){
+            
+            if( substr($line, -10) === ' [checked]' )
+                continue;
+
+            $message = file_get_contents( $line );
+
+            Emitter::dispatch( 'backlog', null, $message );
+
+            $lines[ $index ] = $line .' [checked]';
+            
+            unlink( $line );
+        }
+
+        file_put_contents( __DIR__."/Backlog/{$this->backlog}.log", implode("\n", $lines) );
+        
+    }
+
+    public function putBacklog( string $data = '' ){
+        
+        if(! is_dir( sys_get_temp_dir() ."/{$this->backlog}" ) ){
+            
+            mkdir( sys_get_temp_dir() ."/{$this->backlog}" );
+        }
+
+        $tmp = null;
+
+        while(
+                ($tmp = sys_get_temp_dir() ."/{$this->backlog}/". uniqid($this->backlog) .'.log' ) != null
+            &&  file_exists( $tmp )
+        );
+
+        file_put_contents( $tmp, $data );
+
+        $backlog = fopen(__DIR__."/Backlog/{$this->backlog}.log", 'a');
+
+        fwrite($backlog, "\n".$tmp);
+
+        fclose($backlog);
+
+    }
+
+    static public function instance( $address = null, $port = null, $path = null, $protocol = null ){
+
+        return new self( $address, $port, $path, $protocol );
+    }
 }

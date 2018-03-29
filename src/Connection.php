@@ -2,7 +2,7 @@
 
 namespace Arsenii\WebSockets;
 
-use Arsenii\WebSockets\Strem;
+use Arsenii\WebSockets\Facades\Emitter;
 use Arsenii\WebSockets\Server;
 use Arsenii\WebSockets\Log;
 
@@ -171,29 +171,44 @@ class Connection
         $this->type     = $type;
         $this->server   = $server;
 
-        $this->status   = static::STATUS_INITIAL;
+        $this->status   = self::STATUS_INITIAL;
 
-        $meta = Stream::getMeta( $target );
+        $meta = Stream::getMeta( $target ); // Get Scoket Meta data
         
+        // If meta don't has timeout expired change connection status to STATUS_CONNECTING
         if(! $meta['timed_out'] ){
 
-            $this->status   = static::STATUS_CONNECTING;
+            $this->status   = self::STATUS_CONNECTING;
         }else{
 
             Log::error( Stream::lastErrorMessage( $target ) );
         }
 
+        // Get Socket Ip Adrress and port
         $this->address  = Stream::getAddress( $target );
 
+        // Disable Socket Blocking
         Stream::blocking( $target, !1 );
 
-        Stream::readBufferPosition( $target, 0 );
+        // Read 0 Length Buffer ( one more think for checking if socket was accepted )
+        // Stream::readBufferPosition( $target, 0 );
 
-        Log::info( 'new connection ['. $this->address .']' );
+        Log::info( 'new connection ['. $this->address .']', Log::LEVEL_DEBUG);
         
+        // Add read event listener
         Stream::on('read', $target, function(){
+
             $this->readBuffer();
         });
+
+        if( Emitter::dispatch( 'connecting', $this, '[]' )->isPropagationStopped() ){
+
+            $this->close();
+
+        }else{
+            
+            Emitter::dispatch( 'connected', $this, '[]' );
+        }
     }
 
     /**
@@ -201,19 +216,43 @@ class Connection
      *
      * @return void
      */
-    protected function readBuffer(){   
+    protected function readBuffer(){
+
+        // Check if websocket protocol are wss or auto for making `SSL HANDSHAKE`
         if( 
                 in_array( $this->type, [ 'wss', 'auto' ] )
-            &&  $this->status < static::STATUS_HANDSHAKE_ESTABLISHED
+            &&  $this->status < self::STATUS_HANDSHAKE_ESTABLISHED
         ){
-            Log::comment('wss enter');
+            
+            Log::comment('SSL HANDSHAKE check', Log::LEVEL_DEBUG);
+            
+            // Enable Crypto on socket
             $result = Stream::crypto( $this->target, !0 );
             
             if( false === $result ) {
 
+                // Check if aren't end of file
                 if (! Stream::FEOF( $this->target ) ) {
 
-                    Log::error("SSL Handshake fail.\nBuffer:". Stream::FREAD( $this->target, 8182, !0 ));
+                    // Read socket headers
+                    $buffer = Stream::FREAD( $this->target, self::READ_BUFFER_SIZE );  
+
+                    // if websocket protocol are auto try make not ssl handshake
+                    if( 'auto' == $this->type ){
+                        
+                        // Disable Crypto on socket
+                        Stream::crypto( $this->target, !1 );
+
+                        // If Headers have `Sec-WebSocket-Key` key and value perform not ssl Handshake
+                        if ( preg_match( "/Sec-WebSocket-Key: *(.*?)\r\n/i", $buffer, $match ) ) {
+                            
+                            return $this->checkBuffer( $buffer );
+
+                        }
+
+                    }
+
+                    Log::error("SSL Handshake fail.\nBuffer:". $buffer);
                 }
 
                 return $this->destroy();
@@ -223,63 +262,80 @@ class Connection
                 return; // There isn't enough data and should try again.
             }
             
-            Log::comment(" dispatch('onSslHandshake') ");
-            // Log::comment('onSslHandshake ['. $this->target .']');
+            Log::comment("SSL Handshake was successful [". $this->target ."]", Log::LEVEL_DEBUG);
             
-            $this->status = static::STATUS_HANDSHAKE_ESTABLISHED;
+            $this->status = self::STATUS_HANDSHAKE_ESTABLISHED;
 
+            // Ckeck if connection have data to send
             $this->checkSend();
 
             return;
         }
         
-        $buffer = Stream::buffer( $this->target, static::READ_BUFFER_SIZE );
+        // Read socket headers
+        $buffer = Stream::FREAD( $this->target, self::READ_BUFFER_SIZE );
+
+        Log::comment('On Read ['. $this->target .'] ->'. $buffer, Log::LEVEL_DEBUG);
+        
+        // Check Received Data
+        return $this->checkBuffer( $buffer );
+        
+    }
+
+    /**
+     * Check socket Buffer.
+     *
+     * @return void
+     */
+    protected function checkBuffer( $buffer ){
 
         if( $buffer === '' || $buffer === false ){
 
-            if( Stream::checkFEOF( $this->target, static::READ_BUFFER_SIZE ) ){
+            if( Stream::checkFEOF( $this->target, self::READ_BUFFER_SIZE ) ){
 
-                Log::comment('destroy 1');
+                Log::comment('Check Buffer was empty', Log::LEVEL_DEBUG);
+
                 return $this->destroy();
             }
             
         }
 
-
+        // Append to connection buffer
         $this->_buff    .= $buffer;
+
+        // Calculate connection buffer length
         $this->_buffl   += strlen( $buffer );
 
-        while ($this->_buff !== '') {
+        while ( $this->_buff !== '' ) {
             
-            if ($this->_cpl) {
-
-                 Log::comment('if');
-
-                if ($this->_cpl > $this->_buffl ) {
-                     Log::comment('break');
+            // If current Packet Length
+            if ( $this->_cpl ) {
+                
+                // If CPL are biggest than Buffer Length break while
+                if ( $this->_cpl > $this->_buffl ) {
+                    
+                    Log::comment('Check Buffer CPL aren\'n right', Log::LEVEL_DEBUG);
                     break;
                 }
 
-                 Log::comment('no break');
-
             } else {
-
-                 Log::comment('else');
                 
-                $this->_cpl = $this->server->getPackageLength( $this->id );
-                 Log::comment('_cpl ['. $this->_cpl .']');
+                // Take current Packet Length from server 
+                $this->_cpl = $this->server->packlen( $this->id );
+                
+                Log::comment('Check Buffer CPL ['. $this->_cpl .']', Log::LEVEL_DEBUG);
 
+                // Break while if cpl is 0
                 if ( 0 === $this->_cpl ) {
-
-                     Log::comment('break ['. $this->_cpl .'] -> ');
 
                     break;
 
                 } elseif (
                         $this->_cpl > 0
-                    &&  $this->_cpl <= static::MAX_PACKAGE_SIZE
+                    &&  $this->_cpl <= self::MAX_PACKAGE_SIZE
                 ) {
                     
+                    // If CPL are biggest than Buffer Length break while
                     if ( $this->_cpl > $this->_buffl ) {
 
                         break;
@@ -287,34 +343,34 @@ class Connection
 
                 } else {
 
-                    Log::error( 'error package. package_length='. var_export($this->_cpl, true) );
-                    Log::comment('destroy 2');
+                    Log::error( 'Error package. package_length = '. var_export($this->_cpl, true) );
+                    
                     $this->destroy();
                     return;
                 }
             }
 
+            // IF CPL is egual to Buffer Length
             if ( strlen( $this->_buff ) === $this->_cpl ) {
                 
-                $buffreq        = $this->_buff;
-                $this->_buff    = '';
+                $buffreq        = $this->_buff; // Assign connection buffer to tmp variable
+                $this->_buff    = ''; // Put connection buffer empty
 
             } else {
 
-                $buffreq        = substr( $this->_buff, 0, $this->_cpl );
-                $this->_buff    = substr( $this->_buff, $this->_cpl );
+                $buffreq        = substr( $this->_buff, 0, $this->_cpl ); // Assign CPL substing from connection buffer to tmp variable
+                $this->_buff    = substr( $this->_buff, $this->_cpl ); // Put connection buffer rest from buffer after current Packet Length
             }
             
-            $this->_cpl = 0;
+            $this->_cpl = 0; // Assign current Packet Length to 0
+
             $message    = $this->server->decode( $this->id, $buffreq );
 
-            Log::comment(" dispatch('onMessage') ");
-            Log::comment('onMessage ['. $this->target .']['. $message .']');
+            Log::comment('On Message ['. $this->target .']['. $message .']', Log::LEVEL_DEBUG);
 
-            $this->send('Merci, '.$message);
+            Emitter::dispatch( 'message-received', $this, $message );
         }
-        
-        Log::comment('onRead ['. $this->target .']');
+
     }
 
     /**
@@ -388,14 +444,15 @@ class Connection
      */
     public function putSend( $data ){
 
-        if ( static::MAX_SEND_BUFFER_SIZE <= strlen( $this->_sendb ) + strlen( $data ) ) {
+        // IF Connection MAX_SEND_BUFFER_SIZE less than Send Buffer Length with Data Length trigger error
+        if ( self::MAX_SEND_BUFFER_SIZE <= strlen( $this->_sendb ) + strlen( $data ) ) {
             
-            Log::comment(" dispatch('onError') ");
+            Log::comment("Error buffer can't be great than MAX_SEND_BUFFER_SIZE");
 
             return false;
         }
 
-        $this->_sendb .= $data;
+        $this->_sendb .= $data; // Append data to Send Buffer
         
         return true;
     }
@@ -409,77 +466,100 @@ class Connection
      */
     public function send( $data, $raw = false ){
 
-        Log::comment('handshake -> handshake start send ['. $data .']');
-
+        // If Connection are in Close or Closing state exit from sending
         if (
-                $this->status === static::STATUS_CLOSING
-            ||  $this->status === static::STATUS_CLOSED
+                $this->status === self::STATUS_CLOSING
+            ||  $this->status === self::STATUS_CLOSED
         ) {
 
-            //Log::comment('handshake -> handshake send close ['. $this->status .']');
+            Log::comment('Send Connection are on close/closing state ['. $this->status .']', Log::LEVEL_DEBUG);
             return false;
         }
         
+        // If raw is false data will encoded by server
         if ( false === $raw ) {
             
+            // receive encoded data from server
             $data   = $this->server->encode( $this->id, $data );
 
+            // If encoded data are empty exit
             if ($data === '') {
 
-                Log::comment('handshake -> handshake send data null ['. $data .']');
+                Log::comment('Send Encoded Data are empty ['. $data .']', Log::LEVEL);
                 return null;
             }
         }
 
-        if ( $this->status < static::STATUS_ESTABLISHED ) {
+        // If connection aren't established put data to send buffer
+        if ( $this->status < self::STATUS_ESTABLISHED ) {
 
-            Log::comment('handshake -> handshake send buff ['. $data .']');
+            Log::comment('Send put data to buffer ['. $data .']', Log::LEVEL_DEBUG);
+
             $this->putSend( $data );
 
             return null;
         }
 
-        //Log::comment('handshake -> handshake ['. $this->_sendb .']');
-
+        // If send buffer are empty send directly else put in send buffer
         if ( $this->_sendb === '' ) {
 
-            Log::comment('handshake -> handshake send ['. $data .']');
-
-            $len = Stream::FWRITE( $this->target, $data, 8192 );
-
-            if ( $len === strlen( $data ) ) {
-
-                return true;
-            }
-
+            Log::comment('Send data directly ['. $data .']', Log::LEVEL_DEBUG);
             
-            if ( $len > 0 ) {
+            if( Emitter::dispatch(
+                    $this->getFrame('handshake') ? 'message-sending' : 'handshake-sending', 
+                    $this, 
+                    $data )->isPropagationStopped() ){
 
-                $this->putSend( substr($data, $len) );
+                return null;
 
-            } else {
+            }else{
+                
+                $len = Stream::FWRITE( $this->target, $data, 8192 );
+                
+                Emitter::dispatch( 
+                    $this->getFrame('handshake') ? 'message-sending' : 'handshake-sended',  
+                    $this, 
+                    $data );
 
-                if (! Stream::alive( $this->target ) ) {
+                // If length of writed are the same length with data, data was sended
+                if ( $len === strlen( $data ) ) {
 
-                    Log::comment(" dispatch('onError') ");
-                    $this->destroy();
-
-                    return false;
+                    return true;
                 }
 
-                $this->putSend( $data );
+                // If length of writed aren't the same length with data, push data to send buffer
+                if ( $len > 0 ) {
+
+                    $this->putSend( substr($data, $len) );
+
+                } else {
+
+                    // Check if socket are alive
+                    if (! Stream::alive( $this->target ) ) {
+
+                        Log::error('Error on Send data, socket are not responding');
+
+                        $this->destroy();
+
+                        return false;
+                    }
+
+                    // Socket are alive but data wasn't sended
+                    $this->putSend( $data );
+                }
+
+                // Add write event listener
+                Stream::on( 'write', $this->target, function(){
+        
+                    $this->baseWrite();
+                });
+
+                return null;
             }
-
-            // Worker::$globalEvent->add($this->_socket, EventInterface::EV_WRITE, array($this, 'baseWrite'));
-            Stream::on( 'write', $this->target, function(){
-    
-                $this->baseWrite();
-            });
-
-            return null;
 
         } else {
 
+            // Put data on send buffer
             $this->putSend( $data );
         }
     }
@@ -491,8 +571,9 @@ class Connection
      */
     public function checkSend(){
 
+        // If send buffer aren't empty add write event listener
         if ( $this->_sendb ) {
-
+            
             Stream::on( 'write', $this->target, function(){
     
                 $this->baseWrite();
@@ -509,9 +590,11 @@ class Connection
      */
     public function clearBuff(int $len = null){
 
+        // If length wasn't sended, put length of buffer
         if( is_null( $len ) )
             $len = strlen( $this->_buff );
 
+        // clear part of bufer
         $this->_buff = substr( $this->_buff, $len );
     }    
 
@@ -523,23 +606,36 @@ class Connection
      * @return void
      */
     public function close($data = null, $raw = false){
+
+        // If connection has Closed/Closing status exit
         if (
-                $this->status === static::STATUS_CLOSING
-            ||  $this->status === static::STATUS_CLOSED
+                $this->status === self::STATUS_CLOSING
+            ||  $this->status === self::STATUS_CLOSED
         ) {
 
             return;
 
         } else {
 
+            // If data aren't null send last data before closing
             if (! is_null( $data ) ) {
 
                 $this->send( $data, $raw );
             }
 
-            $this->status = static::STATUS_CLOSING;
+            $last           = $this->status;
+            // Put status Closing
+            $this->status   = self::STATUS_CLOSING;
+            
+            if( Emitter::dispatch( 'disconnecting', $this, '[]' )->isPropagationStopped() ){
+
+                $this->status   = $last;
+
+                return;
+            }
         }
 
+        // If send buffer are empty destroy connection
         if ( $this->_sendb === '' ) {
 
             $this->destroy();
@@ -555,48 +651,37 @@ class Connection
      */
     public function handshake(string $upgrade, int $headlen){
 
-        $this->status = static::STATUS_HANDSHAKE_ESTABLISHED;
-        
-        $this->setFrame('buff', '');
-        $this->setFrame('curlen', 0);
-        $this->setFrame('curbuff','');
-        $this->setFrame('handshake', true);
+        // Put status to STATUS_HANDSHAKE_ESTABLISHED
+        $this->status = self::STATUS_HANDSHAKE_ESTABLISHED;
 
-        $this->clearBuff( $headlen );
+        $this->clearBuff( $headlen ); // Clear buffer with headlen length
         
-        $this->status = static::STATUS_ESTABLISHED;
+        // Put status to STATUS_HANDSHAKE_ESTABLISHED
+        $this->status = self::STATUS_ESTABLISHED;
 
-        Log::comment($upgrade);
+        Log::comment('Handshake Send Upgrade ['. $upgrade .']', Log::LEVEL_DEBUG);
         
-        $this->send( $upgrade, true );
+        // Send Upgrade
+        $this->send( $upgrade, true ); 
         
+        $this->setFrame('buff', ''); // Clear Frame Buffer
+        $this->setFrame('curlen', 0); // Clear Frame Current Buffer length
+        $this->setFrame('curbuff',''); // Clear Frame Buffer length
+        $this->setFrame('handshake', true); // Put data on handshake frame
+
+        // If Frame temporary data aren't empty send temporary to socket
         if (! empty( $this->getFrame('tmp') ) ) {
 
             $this->send( $this->getFrame('tmp'), true );            
-            $this->setFrame('tmp', '');
+            $this->setFrame('tmp', '');// Clear temporary data
         }
         
+        // If Farme type are empty put default Frame type
         if ( empty( $this->getFrame('type') ) ) {
 
             $this->setFrame('type', Server::BINARY_TYPE_BLOB);
         }
-        // Try to emit onWebSocketConnect callback.
-        // if ( isset($connection->onWebSocketConnect) || isset($connection->worker->onWebSocketConnect)) {
-        //     static::parseHttpHeader($buffer);
-        //     try {
-        //         call_user_func(isset($connection->onWebSocketConnect)?$connection->onWebSocketConnect:$connection->worker->onWebSocketConnect, $connection, $buffer);
-        //     } catch (\Exception $e) {
-        //         Worker::log($e);
-        //         exit(250);
-        //     } catch (\Error $e) {
-        //         Worker::log($e);
-        //         exit(250);
-        //     }
-        //     if (!empty($_SESSION) && class_exists('\GatewayWorker\Lib\Context')) {
-        //         $connection->session = \GatewayWorker\Lib\Context::sessionEncode($_SESSION);
-        //     }
-        //     $_GET = $_SERVER = $_SESSION = $_COOKIE = array();
-        // }
+       
 
     } 
 
@@ -607,19 +692,27 @@ class Connection
      */
     public function destroy(){
         
-        if ( $this->status === static::STATUS_CLOSED ) {
+        // If Connection has Closed status exit
+        if ( $this->status === self::STATUS_CLOSED ) {
             
             return;
         }
 
+        // Remove all events listener for socket
         Stream::offSocket( $this->target );
+
+        // Close socket
         Stream::FCLOSE( $this->target );
         
+        // Unset Connection from Server connections array
         $this->server->unset( $this->id );
 
-        $this->status = static::STATUS_CLOSED;
+        // Put connection status Closed
+        $this->status = self::STATUS_CLOSED;
 
-        Log::comment(" dispatch('onClose') ");
+        Emitter::dispatch( 'disconnected', $this, '[]' );
+
+        Log::comment("Destroy was successfully", Log::LEVEL_DEBUG);
     }
 
     /**
@@ -630,7 +723,7 @@ class Connection
     public function ping(){
         
         $this->send( pack( 'H*', '8a00' ), true );
-        Log::comment(" dispatch('onPing') ");
+        Log::comment("Event Ping [". $this->token ."]", Log::LEVEL_DEBUG);
     }
 
     /**
@@ -640,34 +733,7 @@ class Connection
      */
     public function pong(){
         
-        // $this->send( pack( 'H*', '8a00' ), true );
-        Log::comment(" dispatch('onPing') ");
-    }
-
-    /**
-     * Destruct.
-     *
-     * @return void
-     */
-    public function __destruct(){
-        // static $mod;
-
-        // if ( Worker::getGracefulStop() ) {
-
-        //     if (! isset( $mod ) ) {
-
-        //         $mod = ceil( ( self::$statistics['connection_count'] + 1 ) / 3 );
-        //     }
-
-        //     if (0 === self::$statistics['connection_count'] % $mod) {
-        //         Worker::log('worker[' . posix_getpid() . '] remains ' . self::$statistics['connection_count'] . ' connection(s)');
-        //     }
-
-        //     if(0 === self::$statistics['connection_count']) {
-        //         Worker::$globalEvent->destroy();
-        //         exit(0);
-        //     }
-        // }
+        Log::comment("Event Pong [". $this->token ."]", Log::LEVEL_DEBUG);
     }
 
      /**
@@ -675,32 +741,45 @@ class Connection
      *
      * @return void|bool
      */
-    public function baseWrite()
-    {
-        $len = Stream::FWRITE( $this->target, $this->_sendb, 8192) ;
+    public function baseWrite(){
 
-        if ( $len === strlen( $this->_sendb ) ) {
+        if( Emitter::dispatch( 'message-sending', $this, $this->_sendb )->isPropagationStopped() ){
 
-            Stream::off( 'write', $this->target );
-            
-            $this->_sendb = '';
-            
-            if ( $this->_status === static::STATUS_CLOSING ) {
+            return null;
 
-                $this->destroy();
+        }else{
+            // Write Send buffer to socket
+            $len = Stream::FWRITE( $this->target, $this->_sendb, 8192) ;
+
+            Emitter::dispatch( 'message-sended', $this, $this->_sendb );
+
+            // If length of writed are the same length with send buffer remove write event listener
+            if ( $len === strlen( $this->_sendb ) ) {
+
+                Stream::off( 'write', $this->target );
+                
+                $this->_sendb = ''; // Clear send buffer
+                
+                // If Connection has status Closing destroy connection
+                if ( $this->_status === self::STATUS_CLOSING ) {
+
+                    $this->destroy();
+                }
+
+                return true;
             }
 
-            return true;
+            // If length of sended are great than 0 clear send buffer part else destroy connection
+            if ( $len > 0 ) {
+                
+                $this->_sendb = substr( $this->_sendb, $len );
+
+            } else {
+                
+                $this->destroy();
+            }
         }
 
-        if ( $len > 0 ) {
-
-            $this->_sendb = substr( $this->_sendb, $len );
-
-        } else {
-            
-            $this->destroy();
-        }
     }
 
 }

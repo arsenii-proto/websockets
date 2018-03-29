@@ -3,7 +3,7 @@
   "description": "Laravel Web Sockets, with routing and direct message pushing",
   "type": "library",
   "license": "MIT",
-  "keywords" : ["WebSocket", "websockets", "routed", "listenner"],
+  "keywords" : ["WebSocket", "websockets", "routed", "listener"],
   "homepage" : "https://github.com/arsenii-proto/websockets",
   "authors": [
       {

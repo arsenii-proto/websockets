@@ -78,48 +78,4 @@ return [
 
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Websockets Servant
-    |--------------------------------------------------------------------------
-    |
-    | Arsenii Websockets API supports an assortment of back-ends via a single
-    | API, giving you convenient access to each back-end using the same
-    | syntax for each one. Here you may set the default servant.
-    |
-    */
-
-    'servant' => env('WS_SERVANT', 'sync'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Websockets Servants
-    |--------------------------------------------------------------------------
-    |
-    | Here you may configure the Servant for serve each request received by 
-    | your application. A default servant has been added for each 
-    | back-end shipped with Laravel.
-    |
-    | Supported drivers: "sync", "database", "thread"
-    |
-    */
-
-    'servants' => [
-
-        'sync' => [
-            'driver' => 'sync',
-        ],
-
-        'daemon' => [
-            'driver' => 'database',
-            'table' => 'ws_requests',
-            'retry_after' => 90,
-        ],
-
-        'parallel' => [
-            'driver' => 'thread'
-        ]
-
-    ]
-
 ];

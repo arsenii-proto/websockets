@@ -1,13 +1,13 @@
 <?php
-namespace Arsenii\WebSockets\Listenner;
+namespace Arsenii\WebSockets\Listener;
 
 /**
  *
  */
- use Arsenii\WebSockets\Lib\ListennerInterface;
+ use Arsenii\WebSockets\Lib\ListenerInterface;
  use Arsenii\WebSockets\Lib\EventInterface;
 
-class WebSocketListenner implements ListennerInterface
+class WebSocketListener implements ListenerInterface
 {
 
   private $triggers = [];

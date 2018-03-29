@@ -53,35 +53,38 @@ class Log
      * @param  int      $level
      * @return void
      */    
-    public static function log( string $type = 'info', string $out = 'log message', int $level = 3 ){
+    public static function log( string $type = 'info', string $out = 'log message', int $level = self::LEVEL_MASTER ){
 
-        if(! static::$output )
-            static::$output = new ConsoleOutput();
+        if(! self::$output )
+            self::$output = new ConsoleOutput();
 
-        if( $level == static::CURRENT_LEVEL ){
+        if( $level >= self::CURRENT_LEVEL ){
+            
+            if( self::CURRENT_LEVEL == self::LEVEL_DEBUG ){
 
-            static::$output->write('<fg=green;options=bold,underscore>['. Carbon::now()->format("m-d-Y H:i:s.u") .']  </>');
+                self::$output->write('<fg=green;options=bold,underscore>['. Carbon::now()->format("m-d-Y H:i:s.u") .']  </>');
+            }
 
             switch( $type ){
 
                 case 'info': 
-                static::$output->writeln('<info>'. $out .'</info>');
+                self::$output->writeln('<info>'. $out .'</info>');
                 break;
 
                 case 'comment': 
-                static::$output->writeln('<comment>'. $out .'</comment>');
+                self::$output->writeln('<comment>'. $out .'</comment>');
                 break;
 
                 case 'question': 
-                static::$output->writeln('<question>'. $out .'</question>');
+                self::$output->writeln('<question>'. $out .'</question>');
                 break;
 
                 case 'error': 
-                static::$output->writeln('<error>'. $out .'</error>');
+                self::$output->writeln('<error>'. $out .'</error>');
                 break;
 
                 default: 
-                static::$output->writeln($out);
+                self::$output->writeln($out);
                 break;
             }
 
@@ -96,9 +99,9 @@ class Log
      * @param  int      $level
      * @return void
      */  
-    public static function info( string $out = 'log message', int $level = 3 ){
+    public static function info( string $out = 'log message', int $level = self::LEVEL_MASTER ){
         
-        static::log('info', $out, $level);
+        self::log('info', $out, $level);
     }
 
     /**
@@ -108,9 +111,9 @@ class Log
      * @param  int      $level
      * @return void
      */  
-    public static function comment( string $out = 'log message', int $level = 3 ){
+    public static function comment( string $out = 'log message', int $level = self::LEVEL_MASTER ){
         
-        static::log('comment', $out, $level);
+        self::log('comment', $out, $level);
     }
 
     /**
@@ -120,9 +123,9 @@ class Log
      * @param  int      $level
      * @return void
      */  
-    public static function question( string $out = 'log message', int $level = 3 ){
+    public static function question( string $out = 'log message', int $level = self::LEVEL_MASTER ){
         
-        static::log('question', $out, $level);
+        self::log('question', $out, $level);
     }
 
     /**
@@ -132,9 +135,9 @@ class Log
      * @param  int      $level
      * @return void
      */  
-    public static function error( string $out = 'log message', int $level = 3 ){
+    public static function error( string $out = 'log message', int $level = self::LEVEL_MASTER ){
         
-        static::log('error', $out, $level);
+        self::log('error', $out, $level);
     }
 
     /**
@@ -144,9 +147,9 @@ class Log
      * @param  int      $level
      * @return void
      */  
-    public static function raw( string $out = 'log message', int $level = 3 ){
+    public static function raw( string $out = 'log message', int $level = self::LEVEL_MASTER ){
         
-        static::log('raw', $out, $level);
+        self::log('raw', $out, $level);
     }
     
 }

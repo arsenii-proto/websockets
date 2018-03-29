@@ -8,7 +8,7 @@ use Exception;
 
 use Arsenii\WebSockets\Lib\ServerInterface;
 use Arsenii\WebSockets\Lib\ConnectionInterface;
-use Arsenii\WebSockets\Lib\ListennerInterface;
+use Arsenii\WebSockets\Lib\ListenerInterface;
 
 use Arsenii\WebSockets\Connection\WebSocketConnection;
 use Arsenii\WebSockets\Event\WebSocketEvent;
@@ -22,7 +22,7 @@ final class WebSocketServer implements ServerInterface
   private $socket;
   private $sockets;
   private $connections = [];
-  private $listenners = [];
+  private $listeners = [];
 
   private $inlinePort;
   private $inlineSocket;
@@ -216,15 +216,15 @@ final class WebSocketServer implements ServerInterface
 
   }
 
-  public function addListenner(ListennerInterface $listenner = null){
-    if( !is_null($listenner) ) $this->listenners[] = $listenner;
+  public function addListener(ListenerInterface $listener = null){
+    if( !is_null($listener) ) $this->listeners[] = $listener;
   }
 
-  public function removeListenner(ListennerInterface $listenner = null){
-    if( !is_null($listenner) )
-      foreach ($this->listenners as $i => $ln)
-        if( $this->listenners[$i] == $listenner )
-          unset($this->listenners[$i]);
+  public function removeListener(ListenerInterface $listener = null){
+    if( !is_null($listener) )
+      foreach ($this->listeners as $i => $ln)
+        if( $this->listeners[$i] == $listener )
+          unset($this->listeners[$i]);
   }
 
   public function getConnections(){
@@ -332,9 +332,9 @@ final class WebSocketServer implements ServerInterface
 
   private function dispachEvent($type = 'none', $connection, $message = null){
     $event = new WebSocketEvent($type, $connection, $message, $this);
-    foreach ($this->listenners as $listenner)
+    foreach ($this->listeners as $listener)
       if( !$event->isPropagationStopped() ){
-        app()->call([$listenner, 'on'.$type], ['event' => $event]);
+        app()->call([$listener, 'on'.$type], ['event' => $event]);
       }
 
     return $event;

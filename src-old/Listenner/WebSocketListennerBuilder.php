@@ -1,5 +1,5 @@
 <?php
-namespace Arsenii\WebSockets\Listenner;
+namespace Arsenii\WebSockets\Listener;
 
 /**
  *
@@ -8,9 +8,9 @@ use Closure;
 use App;
 
 use Arsenii\WebSockets\Lib\ServerInterface;
-use Arsenii\WebSockets\Listenner\WebSocketListenner;
+use Arsenii\WebSockets\Listener\WebSocketListener;
 
-final class WebSocketListennerBuilder
+final class WebSocketListenerBuilder
 {
 
   static private $server;
@@ -41,7 +41,7 @@ final class WebSocketListennerBuilder
       if( is_null( $route['pattern'] ) || empty( $route['pattern'] ) )
         return false;
 
-      self::buildListenner([ 'message-received' => $route ]);
+      self::buildListener([ 'message-received' => $route ]);
 
       return true;
     }
@@ -50,17 +50,17 @@ final class WebSocketListennerBuilder
   }
 
   static public function build($routes){
-    self::buildListenner( $routes );
+    self::buildListener( $routes );
   }
 
-  static public function push($listennerClass = null){
-    if( !is_null( $listennerClass ) && !is_null( ( $instance = App::make($listennerClass) ) ) ){
-      self::$server->addListenner( $instance );
+  static public function push($listenerClass = null){
+    if( !is_null( $listenerClass ) && !is_null( ( $instance = App::make($listenerClass) ) ) ){
+      self::$server->addListener( $instance );
     }
   }
 
-  static private function buildListenner($routes){
-    self::$server->addListenner(new WebSocketListenner( $routes ));
+  static private function buildListener($routes){
+    self::$server->addListener(new WebSocketListener( $routes ));
   }
 
   private function __construct(){ }

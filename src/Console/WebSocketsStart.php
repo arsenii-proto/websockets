@@ -13,7 +13,6 @@ class WebSocketsStart extends Command
 
     public function handle()
     {
-        echo 'start server'.PHP_EOL;
         Server::start();
     }
 }

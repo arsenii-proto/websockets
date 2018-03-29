@@ -5,7 +5,7 @@ namespace Arsenii\WebSockets\Lib;
  */
 use Arsenii\WebSockets\Lib\EventInterface;
 
-interface ListennerInterface
+interface ListenerInterface
 {
 
   public function onConnecting(EventInterface $event);

@@ -18,7 +18,7 @@ class WebSocketsProvider extends ServiceProvider
             $this->commands([
                 WebSocketsStart::class,
                 WebSocketsSend::class,
-                WebSocketsDaemon::class,
+                // WebSocketsDaemon::class,
             ]);
         }
 
@@ -40,9 +40,9 @@ class WebSocketsProvider extends ServiceProvider
             return new \Arsenii\WebSockets\Looper();
         });
         
-        // $this->app->singleton('ws.emitter', function($app) {
-        //     return new \Arsenii\WebSockets\Emitter();
-        // });
+        $this->app->singleton('ws.emitter', function($app) {
+            return new \Arsenii\WebSockets\Emitter();
+        });
 
         $this->app->singleton('ws.builder', function($app) {
             return new \Arsenii\WebSockets\Builder();
@@ -57,7 +57,7 @@ class WebSocketsProvider extends ServiceProvider
         });
 
 
-        $this->app->bind('ws.server', function($app) {
+        $this->app->singleton('ws.server', function($app) {
             return new \Arsenii\WebSockets\Server();
         });
 
