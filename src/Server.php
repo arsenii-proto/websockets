@@ -898,4 +898,9 @@ class Server
 
         return new self( $address, $port, $path, $protocol );
     }
+
+    public function getConnections(){
+
+        return $this->$connections;
+    }
 }
