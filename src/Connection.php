@@ -496,7 +496,7 @@ class Connection
             // If encoded data are empty exit
             if ($data === '') {
 
-                Log::comment('Send Encoded Data are empty ['. $data .']', Log::LEVEL);
+                Log::comment('Send Encoded Data are empty ['. $data .']', Log::LEVEL_DEBUG);
                 return null;
             }
         }
