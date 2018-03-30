@@ -901,6 +901,6 @@ class Server
 
     public function getConnections(){
 
-        return $this->$connections;
+        return $this->connections;
     }
 }
