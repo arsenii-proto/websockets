@@ -19,7 +19,7 @@ class Stream
      *
      * @var int
      */
-    const TIMEOUT = 1000;
+    const TIMEOUT = 100000000;
 
     /**
      * Array with sockets saved by unique id generated with their stacked order.
@@ -532,6 +532,9 @@ class Stream
     public static function buffer( $target, int $size = 65535 ){
         
         // Check if socket target are presence in static sockets array
+
+        // Log::comment("FREAD $target - $size", Log::LEVEL_MASTER);
+        
         if(! isset( self::$sockets[ $target ] ) )
             return false;
 
@@ -540,7 +543,7 @@ class Stream
 
         $socket     = self::$sockets[ $target ];// Take socket from static sockets array
 
-        return @fread( $socket, $size );;
+        return @fread( $socket, $size );
 
     }
 
@@ -552,9 +555,12 @@ class Stream
      * @param  bool     $bin2hex
      * @return string
      */
-    public static function FREAD( string $target, int $size = 0, bool $bin2hex = false ){
+    public static function FREAD( string $target, int $size = 65535, bool $bin2hex = false ){
         
         // Check if socket target are presence in static sockets array
+
+        // Log::comment("FREAD $target - $size", Log::LEVEL_MASTER);
+
         if(! isset( self::$sockets[ $target ] ) )
             return false;
 
@@ -637,6 +643,8 @@ class Stream
      * @return bool
      */
     public static function checkFEOF( $target, int $size = 65535 ){
+
+        // Log::comment("FREAD $target - $size", Log::LEVEL_MASTER);
         
         // Check if socket target are presence in static sockets array
         if(! isset( self::$sockets[ $target ] ) )

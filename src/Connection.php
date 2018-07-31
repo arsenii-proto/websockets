@@ -202,7 +202,7 @@ class Connection
         Stream::blocking( $target, !1 );
 
         // Read 0 Length Buffer ( one more think for checking if socket was accepted )
-        // Stream::readBufferPosition( $target, 0 );
+        Stream::readBufferPosition( $target, 0 );
 
         Log::info( 'new connection ['. $this->address .']', Log::LEVEL_DEBUG);
         
@@ -286,7 +286,7 @@ class Connection
         // Read socket headers
         $buffer = Stream::FREAD( $this->target, self::READ_BUFFER_SIZE );
 
-        Log::comment('On Read ['. $this->target .'] ->'. $buffer, Log::LEVEL_DEBUG);
+        // Log::comment('On Read ['. $this->target .'] ->'. $buffer, Log::LEVEL_DEBUG);
         
         // Check Received Data
         return $this->checkBuffer( $buffer );
@@ -309,36 +309,40 @@ class Connection
                 return $this->destroy();
             }
             
+        } else {
+            
+            // Append to connection buffer
+            $this->_buff    .= $buffer;
+            // Calculate connection buffer length
+            $this->_buffl   += strlen( $buffer );
         }
 
-        // Append to connection buffer
-        $this->_buff    .= $buffer;
-
-        // Calculate connection buffer length
-        $this->_buffl   += strlen( $buffer );
 
         while ( $this->_buff !== '' ) {
             
             // If current Packet Length
+            // Log::comment("cpl -> {$this->cpl}", Log::LEVEL_MASTER);
             if ( $this->_cpl ) {
                 
+                Log::comment('The current packet length is known.', Log::LEVEL_DEBUG);
                 // If CPL are biggest than Buffer Length break while
                 if ( $this->_cpl > $this->_buffl ) {
                     
-                    Log::comment('Check Buffer CPL aren\'n right', Log::LEVEL_DEBUG);
+                    Log::comment('Data is not enough for a package', Log::LEVEL_DEBUG);
                     break;
                 }
 
             } else {
                 
                 // Take current Packet Length from server 
+                Log::comment('Get current package length.', Log::LEVEL_DEBUG);
+                
                 $this->_cpl = $this->server->packlen( $this->id );
                 
-                Log::comment('Check Buffer CPL ['. $this->_cpl .']', Log::LEVEL_DEBUG);
-
                 // Break while if cpl is 0
                 if ( 0 === $this->_cpl ) {
-
+                    
+                    Log::comment("The packet length is unknown. {$this->_cpl}", Log::LEVEL_DEBUG);
                     break;
 
                 } elseif (
@@ -347,8 +351,10 @@ class Connection
                 ) {
                     
                     // If CPL are biggest than Buffer Length break while
-                    if ( $this->_cpl > $this->_buffl ) {
+                    Log::comment("223 -> $this->_cpl > ".strlen( $buffer )."\n", Log::LEVEL_DEBUG);
+                    if ( $this->_cpl > strlen( $buffer ) ) {
 
+                        Log::comment('Data is not enough for a package.', Log::LEVEL_DEBUG);
                         break;
                     }
 
@@ -361,9 +367,11 @@ class Connection
                 }
             }
 
+            Log::comment('The data is enough for a packet.', Log::LEVEL_DEBUG);
             // IF CPL is egual to Buffer Length
             if ( strlen( $this->_buff ) === $this->_cpl ) {
                 
+                Log::comment('The current packet length is equal to the length of the buffer', Log::LEVEL_DEBUG);
                 $buffreq        = $this->_buff; // Assign connection buffer to tmp variable
                 $this->_buff    = ''; // Put connection buffer empty
 
@@ -672,13 +680,13 @@ class Connection
 
         Log::comment('Handshake Send Upgrade ['. $upgrade .']', Log::LEVEL_DEBUG);
         
-        // Send Upgrade
-        $this->send( $upgrade, true ); 
-        
-        $this->setFrame('buff', ''); // Clear Frame Buffer
         $this->setFrame('curlen', 0); // Clear Frame Current Buffer length
-        $this->setFrame('curbuff',''); // Clear Frame Buffer length
         $this->setFrame('handshake', true); // Put data on handshake frame
+        $this->setFrame('buff', ''); // Clear Frame Buffer
+        $this->setFrame('curbuff',''); // Clear Frame Buffer length
+
+        // Send Upgrade
+        $this->send( $upgrade, true );         
 
         // If Frame temporary data aren't empty send temporary to socket
         if (! empty( $this->getFrame('tmp') ) ) {

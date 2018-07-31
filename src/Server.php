@@ -381,40 +381,54 @@ class Server
      */
     public function packlen($connuid){
 
+        global $AD_COUNTER;
+
+        $AD_COUNTER = $AD_COUNTER ?? 0;
+        $AD_COUNTER++;
+
+
+        Log::comment("-------------------\n--------- START - $AD_COUNTER \n-------------------", Log::LEVEL_DEBUG);
+
         // Check Connection uniqid presence
         if ( isset( $this->connections[ $connuid ] ) ) {
 
             // Take connection
             $connection = $this->connections[ $connuid ];
-
+            
             // Take buffer from connection
             $buff       = $connection->getBuffer();
-
+            
             // Take buffer length from connection
             $bufflen    = $connection->getBufferLen();
+            Log::comment('Receive length. '. $bufflen, Log::LEVEL_DEBUG);
 
             // Data offset (4 bits) ( take a look https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure )
-            if ( $bufflen < 2 ) {
+            if ( $bufflen < 6 ) {
 
-                Log::comment('bufflen ['. $bufflen .']', Log::LEVEL_DEBUG);
+                Log::comment('We need more data ['. $bufflen .']', Log::LEVEL_DEBUG);
                 return 0;
             }
 
-            Log::comment('Conn Status ->'. $connection->getStatus(), Log::LEVEL_DEBUG);
+            // Log::comment('Conn Status ->'. $connection->getStatus(), Log::LEVEL_DEBUG);
 
             if( $connection->getStatus() < Connection::STATUS_ESTABLISHED ){
 
-                Log::comment('perform handshake ['. $connuid .']', Log::LEVEL_DEBUG);
-
+                Log::comment('Has not yet completed the handshake. ', Log::LEVEL_DEBUG);
+                
                 // Perform Handshake ( take a look https://en.wikipedia.org/wiki/WebSocket#Protocol_handshake )
                 return $this->handshake($connuid);
             }
-
+            
             // When connection has websockets Frame length
             if ( $connection->getFrame('curlen') ) {
 
-                if ( $connection->getFrame('curlen') > $bufflen ) {
+                // Log::info("if");
 
+                Log::comment('Buffer websocket frame data. ', Log::LEVEL_DEBUG);
+                
+                if ( $connection->getFrame('curlen') > $bufflen ) {
+                    
+                    Log::comment('We need more frame data. Return 0, because it is not clear the full packet length, waiting for the frame of fin=1.', Log::LEVEL_MASTER);
                     return 0;
                 }
 
@@ -427,70 +441,82 @@ class Server
                 $masked         = $second >> 7; // Check if frame ( segment ) was masked
                 $opcode         = $first & 0xf; // Get opcode ( take a look https://tools.ietf.org/html/rfc6455#page-65 )
 
-                Log::comment('opcode -> '. $opcode, Log::LEVEL_DEBUG);
+                if (! $masked ) {
+                    
+                    Log::comment("frame not masked so close the connection\n", Log::LEVEL_DEBUG);
+                    $connection->close();
+                    return 0;
+                }
 
                 switch ( $opcode ) {
+
                     case 0x0: 
+                        Log::info("0x0 type. ");
                         break;
 
                     case 0x1: 
                         // Blob type.
+                        Log::comment('Blob type. ', Log::LEVEL_DEBUG);
                         break;
                     case 0x2: 
                         // Arraybuffer type.
-                        Log::comment('opcode `Close package` -> '. $opcode, Log::LEVEL_DEBUG);
+                        Log::comment('Arraybuffer type. ', Log::LEVEL_DEBUG);
                         break;
                     case 0x8:
                         // Connection Close Frame
+                        Log::comment('Close package. ', Log::LEVEL_DEBUG);
                         $connection->close();
                         return 0;
                     case 0x9:
-                        // Ping package.                        
-                        $connection->ping();
+                        // // Ping package.
+                        Log::comment('Ping package. ', Log::LEVEL_DEBUG);
+                        // $connection->ping();
 
-                        //  Consume data from receive buffer.
-                        if (! $datalen ) {
+                        // //  Consume data from receive buffer.
+                        // if (! $datalen ) {
 
-                            $head_len   = $masked ? 6 : 2;
-                            $connection->clearBuff( $head_len );
+                        //     $head_len   = $masked ? 6 : 2;
+                        //     $connection->clearBuff( $head_len );
 
-                            if ( $bufflen > $head_len ) {
+                        //     if ( $bufflen > $head_len ) {
                                 
-                                return $this->packlen( $connuid );
-                            }
+                        //         return $this->packlen( $connuid );
+                        //     }
 
-                            return 0;
-                        }
+                        //     return 0;
+                        // }
 
                         break;
                     case 0xa:
-                        // Pong package.                        
-                        $connection->pong();
+                        // Pong package.
+                        Log::comment('Pong package.', Log::LEVEL_DEBUG);
+                        // $connection->pong();
                         
-                        //  Consume data from receive buffer.
-                        if (! $datalen ) {
+                        // //  Consume data from receive buffer.
+                        // if (! $datalen ) {
 
-                            $head_len   = $masked ? 6 : 2;
-                            $connection->clearBuff( $head_len );
+                        //     $head_len   = $masked ? 6 : 2;
+                        //     $connection->clearBuff( $head_len );
 
-                            if ( $bufflen > $head_len ) {
+                        //     if ( $bufflen > $head_len ) {
 
-                                return $this->packlen( $connuid );
-                            }
+                        //         return $this->packlen( $connuid );
+                        //     }
 
-                            return 0;
-                        }
+                        //     return 0;
+                        // }
 
                         break;
                     
                     default :
                         // Wrong opcode. 
-                        Log::error( "Error opcode `$opcode` and close websocket connection. Buffer:`" . $connection->getBuffer(!0) .'`');
+                        Log::error( "Error opcode `$opcode` and close websocket connection. ");
                         $connection->close();
                         return 0;
                 }
 
                 // Calculate packet length.
+                Log::comment('Calculate packet length. ', Log::LEVEL_DEBUG);
                 $head_len       = 6;
 
                 if ( $datalen === 126 ) {
@@ -527,12 +553,63 @@ class Server
 
                 if ( $total_package_size > Connection::MAX_PACKAGE_SIZE ) {
 
-                    Log::error("Error package. package_length = $total_package_size");                    
+                    Log::error("Error package. package_length = $total_package_size");
+
                     $connection->close();
+
                     return 0;
                 }
 
                 if ($is_fin_frame) {
+
+                    if ( 0x9 === $opcode ) {
+
+                        if ( $bufflen >= $current_frame_length ) {
+
+                            $ping_data = $this->decode( $connuid, substr( $buff, 0, $current_frame_length ) );
+
+                            $connection->clearBuff( $current_frame_length );
+
+                            $tmp_connection_type = $connection->getFrame("type") ? $connection->getFrame("type") : self::BINARY_TYPE_BLOB;
+
+                            $connection->setFrame("type", "\x8a");
+
+                            $connection->send($ping_data, true);
+
+                            $connection->setFrame("type", $tmp_connection_type);
+
+                            if ( $bufflen > $current_frame_length ) {
+
+                                $connection->clearBuff($current_frame_length);
+
+                                return $this->packlen( $connuid );
+                            }
+                        }
+
+                        return 0;
+
+                    } else if ( 0xa === $opcode ) {
+
+                        if ( $bufflen >= $current_frame_length ) {
+
+                            $pong_data = $this->decode( $connuid, substr( $buffer, 0, $current_frame_length ) );
+
+                            $connection->clearBuff( $current_frame_length );
+
+                            $tmp_connection_type = $connection->getFrame("type") ? $connection->getFrame("type") : self::BINARY_TYPE_BLOB;
+
+                            $connection->setFrame("type", $tmp_connection_type);
+                            
+                            if ( $bufflen > $current_frame_length ) {
+
+                                $connection->clearBuff($current_frame_length);
+
+                                return $this->packlen( $connuid );
+                            }
+                        }
+
+                        return 0;
+                    }
 
                     return $current_frame_length;
 
@@ -541,12 +618,53 @@ class Server
                     // Push websockets Frame length
                     $connection->setFrame( 'curlen', $current_frame_length );
                 }
+                
+            }
+
+            // Received just a frame length data.
+            Log::comment("Received just a frame length data. ", Log::LEVEL_DEBUG);
+
+            if ( $connection->getFrame( 'curlen' ) === $bufflen ) {
+
+                $this->decode( $connuid, $buff );
+
+                $connection->clearBuff( $connection->getFrame( 'curlen' ) );
+
+                $connection->setFrame( 'curlen', 0 );
+
+                return 0;
+
+            } // The length of the received data is greater than the length of a frame.
+            elseif ( $connection->getFrame( 'curlen' ) < $bufflen ) {
+
+                Log::comment("The length of the received data is greater than the length of a frame. ", Log::LEVEL_DEBUG);
+
+                $this->decode( $connuid, substr( $buff, 0, $connection->getFrame( 'curlen' ) ) );
+
+                $connection->clearBuff( $connection->getFrame( 'curlen' ) );
+
+                // $current_frame_length = $connection->getFrame( 'curlen' );
+
+                $connection->setFrame( 'curlen', 0 );
+                // Continue to read next frame.
+                Log::comment("Continue to read next frame. ", Log::LEVEL_DEBUG);
+
+                // $connection->clearBuff($current_frame_length);
+
+                return $this->packlen( $connuid );
+            } // The length of the received data is less than the length of a frame.
+            else {
+
+                Log::comment("The length of the received data is less than the length of a frame. ", Log::LEVEL_DEBUG);
+
+                return 0;
             }
             
         }
 
         // Connection with uniqid not present
         Log::comment('No conn ['. $connuid .']', Log::LEVEL_DEBUG);
+
         return 0;
     }
 
@@ -574,7 +692,7 @@ class Server
 
             if ( 0 === strpos( $buff, 'GET' ) ) {
 
-                 Log::comment('Handshake GET ['. $connuid .']', Log::LEVEL_DEBUG);
+                Log::comment('Handshake GET ['. $connuid .']', Log::LEVEL_DEBUG);
 
                 $endpos     = strpos($buff, "\r\n\r\n"); // Take End position of Headers
                 $headlen    = $endpos + 4; // Get Length of Headers
@@ -617,7 +735,7 @@ class Server
                 $upgrade .= "Upgrade: websocket\r\n";
                 $upgrade .= "Sec-WebSocket-Version: 13\r\n";
                 $upgrade .= "Connection: Upgrade\r\n";
-                $upgrade .= "Server: arsenii/". Server::VERSION ."\r\n"; // Put Server Version in response
+                // $upgrade .= "Server: arsenii/". Server::VERSION ."\r\n"; // Put Server Version in response
                 $upgrade .= "Sec-WebSocket-Accept: ". $ownkey ."\r\n\r\n"; // Put own key in response
                 
                 Log::comment('Handshake send Response ['. $upgrade .']', Log::LEVEL_DEBUG);
