@@ -123,5 +123,73 @@ class Emitter
 
         $this->listeners[] = new Listener( $routes );
     }
+
+    private function addType($type, $pattern, $path) {
+
+        $this->make([
+
+            $type =>  [
+
+                'pattern'   => ( 
+                                    count( $this->groups )
+                                    ? ($this->groups[ count( $this->groups ) -1 ] . '&&')
+                                    : ('')
+                                ) .$pattern,
+                'path'      => $path
+            ]
+
+        ]);
+    }
+
+    public function connecting($pattern, $path) {
+
+        $this->addType('connecting', $pattern, $path);
+    }
+
+    public function connected($pattern, $path) {
+
+        $this->addType('connected', $pattern, $path);
+    }
+
+    public function handshakeSending($pattern, $path) {
+
+        $this->addType('handshake-sending', $pattern, $path);
+    }
+
+    public function handshakeSended($pattern, $path) {
+
+        $this->addType('handshake-sended', $pattern, $path);
+    }
+
+    public function sending($pattern, $path) {
+
+        $this->addType('message-sending', $pattern, $path);
+    }
+
+    public function sended($pattern, $path) {
+
+        $this->addType('message-sended', $pattern, $path);
+    }
+
+    public function receiving($pattern, $path) {
+
+        $this->addType('message-received', $pattern, $path);
+    }
+
+    public function disconnecting($pattern, $path) {
+
+        $this->addType('disconnecting', $pattern, $path);
+    }
+
+    public function disconnected($pattern, $path) {
+
+        $this->addType('disconnected', $pattern, $path);
+    }
+
+    public function backlog($pattern, $path) {
+
+        $this->addType('backlog', $pattern, $path);
+    }
+
     
 }
