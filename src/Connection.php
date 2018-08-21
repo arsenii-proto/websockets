@@ -216,9 +216,6 @@ class Connection
 
             $this->close();
 
-        }else{
-            
-            Emitter::dispatch( 'connected', $this, '[]' );
         }
     }
 

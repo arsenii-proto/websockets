@@ -349,7 +349,13 @@ class Server
         ); 
         
         // Assign New Connection to server connections array with uniqid key
-        $this->connections[ $connuid ] = new Connection($connuid, $new_target, $this->hostProtocol, $this);
+        $connection = new Connection($connuid, $new_target, $this->hostProtocol, $this);
+
+        if( $connection->getStatus() != Connection::STATUS_CLOSED ) {
+
+            $this->connections[ $connuid ] = $connection;
+            Emitter::dispatch( 'connected', $connection, '[]' );
+        }
 
         Log::info( 'new Conn -> '. $connuid, Log::LEVEL_DEBUG);
 
