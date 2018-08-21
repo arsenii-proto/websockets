@@ -494,6 +494,25 @@ class Connection
         
         // If raw is false data will encoded by server
         if ( false === $raw ) {
+
+            if( in_array( gettype($data), ['object', 'array'] ) ){
+
+                if(
+                            gettype($data) == 'object'
+                        && method_exists( $data, 'toString') 
+                    ){
+                    
+                    $data = $data->toString();
+            
+                }else{
+            
+                    $data = json_encode($data);
+            
+                }
+        
+            }
+        
+            $data = (string) $data;
             
             // receive encoded data from server
             $data   = $this->server->encode( $this->id, $data );
