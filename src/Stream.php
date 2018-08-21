@@ -19,7 +19,7 @@ class Stream
      *
      * @var int
      */
-    const TIMEOUT = 100000000;
+    const TIMEOUT = 0; // 100000000
 
     /**
      * Array with sockets saved by unique id generated with their stacked order.
